@@ -4,9 +4,9 @@
     </h1>
 </div>
 
-### Thread
+## Thread
 
-##### 线程暂停的方法
+### 线程暂停的方法
 
 sleep、yield、join、stop、interrupt
 
@@ -22,7 +22,7 @@ interrupt：停止一个线程执行，但允许该线程料理一下自己的�
 
 
 
-##### sleep和wait的区别
+### sleep和wait的区别
 
 对于sleep()方法，我们首先要知道该方法是属于**Thread类**中的。而wait()方法，则是属于**Object类**中的。
 
@@ -40,7 +40,7 @@ sleep可以在任何地方使用，而wait只能在同步方法或者同步块�
 
 
 
-##### ThreadLocal
+### ThreadLocal
 
 ThreadLocal 顾名思义“线程本地变量”，对应到 Java 代码就是线程私有变量，可以把它理解为对于同一个变量，在不同的线程包含不同的副本，并且各个副本之间相互独立
 
@@ -104,7 +104,7 @@ private T setInitialValue() {
 
 
 
-##### 线程池
+### 线程池
 
 线程池的优点
 
@@ -225,9 +225,9 @@ Java中的**四种**线程池
 
 
 
-### HashMap
+## HashMap
 
-##### HashMap的扩容机制
+### HashMap的扩容机制
 
 - capacity 即容量，默认16。
 - loadFactor 加载因子，默认是0.75
@@ -237,7 +237,7 @@ Java中的**四种**线程池
   - 还有一个因素是为了提升扩容效率。因为`HashMap`的容量（`size`属性，构造函数中的`initialCapacity`变量）有一个要求：它一定是2的幂。所以加载因子选择了0.75就可以保证它与容量的乘积为整数。
 - threshold 阈值。阈值=容量*加载因子。默认12。当元素数量超过阈值时便会触发扩容
 
-###### JDK7中的扩容机制
+#### JDK7中的扩容机制
 
 JDK7的扩容机制相对简单，有以下特性：
 
@@ -246,7 +246,7 @@ JDK7的扩容机制相对简单，有以下特性：
 - 第一次put时会初始化数组，其容量变为**不小于指定容量的2的幂数**。然后根据负载因子确定阈值。
 - 如果不是第一次扩容，则 **新容量=旧容量×2** ， **负载因子新阈值=新容量×负载因子** 。
 
-###### JDK8的扩容机制
+#### JDK8的扩容机制
 
 JDK8的扩容做了许多调整。
 
@@ -265,7 +265,7 @@ HashMap的容量变化通常存在以下几种情况：
 
 
 
-##### HashMap为什么线程不安全
+### HashMap为什么线程不安全
 
 首先HashMap是**线程不安全**的，其主要体现：
 
@@ -354,6 +354,6 @@ JDK8
 
 
 
-##### ConcurrentHashMap的底层原理
+### ConcurrentHashMap的底层原理
 
 [ConcurrentHashMap底层结构和原理详解](https://blog.csdn.net/qq_45408390/article/details/122189726)
