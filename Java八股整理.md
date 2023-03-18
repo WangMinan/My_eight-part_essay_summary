@@ -36,7 +36,7 @@ sleep()方法导致了程序暂停执行指定的时间，让出CPU给其他线�
 
 sleep可以在任何地方使用，而wait只能在同步方法或者同步块中使用。
 
-![Sleep VS Wait](https://img-blog.csdnimg.cn/2019050816141738.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzIwMDA5MDE1,size_16,color_FFFFFF,t_70)
+![Sleep VS Wait](https://cdn.jsdelivr.net/gh/WangMinan/Pics/2019050816141738.png)
 
 
 
