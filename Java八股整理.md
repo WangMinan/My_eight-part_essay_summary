@@ -4,7 +4,7 @@
     </h1>
 </div>
 
-## Thread
+## Thread类
 
 ### 线程暂停的方法
 
@@ -225,6 +225,49 @@ Java中的**四种**线程池
 
 
 
+## 线程锁
+
+### 可重入锁
+
+可重入就是说某个线程已经获得某个锁，可以再次获取锁而不会出现死锁。
+
+可重入锁有
+
+- synchronized 无须手动释放
+- ReentrantLock 需要手动释放 加锁次数和释放次数要一致 否则死锁
+
+```java
+// 演示可重入锁是什么意思，可重入，就是可以重复获取相同的锁，synchronized和ReentrantLock都是可重入的
+// 可重入降低了编程复杂性
+public class WhatReentrant {
+	public static void main(String[] args) {
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				synchronized (this) {
+					System.out.println("第1次获取锁，这个锁是：" + this);
+					int index = 1;
+					while (true) {
+						synchronized (this) {
+							System.out.println("第" + (++index) + "次获取锁，这个锁是：" + this);
+						}
+						if (index == 10) {
+							break;
+						}
+					}
+				}
+			}
+		}).start();
+	}
+}
+```
+
+实现原理
+
+https://blog.csdn.net/txk396879586/article/details/122428293
+
+
+
 ## HashMap
 
 ### HashMap的扩容机制
@@ -262,6 +305,12 @@ HashMap的容量变化通常存在以下几种情况：
 - 不是首次put，则不再初始化，直接存入数据，然后判断是否需要扩容；
 
 由于数组的容量是以2的幂次方扩容的，那么一个Entity在扩容时，新的位置要么在**原位置**，要么在**原长度+原位置**的位置。
+
+在map**数组长度超过64且链表长度超过8后**，HashMap的实现由数组+链表转为数组+**红黑树**，**8**被称为树化标准长度
+
++ 红黑树的特点：父节点的一侧都是比父节点小的元素，父节点的另一侧都是比父节点大的元素，搜索时间复杂度为O(log2n)
+
+  ![image-20230318221647352](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230318221647352.png)
 
 
 
@@ -360,3 +409,130 @@ JDK8
 
 
 
+## List及其子类的线程安全问题
+
+### ArrayList
+
+动态数组，使用的时候，只需要操作即可，内部已经实现扩容机制。
+
+- 线程不安全
+- 有顺序，会按照添加进去的顺序排好
+- 基于数组实现，随机访问速度快，插入和删除较慢一点
+- 可以插入null元素，且可以重复
+
+如果需要线程安全，则需要选择其他的类或者使用`Collections.synchronizedList(arrayList)`
+
+#### private常量
+
+如果我们创建的时候不指定大小，那么就会初始化一个默认大小为10,`DEFAULT_CAPACITY`就是默认大小。
+
+```java
+private static final int DEFAULT_CAPACITY = 10;
+```
+
+扩容时capacity右移一位，表现为`newCapacity=oldCapacity*2`
+
+```java
+private void grow(int minCapacity) {
+        // 获取旧的容量
+        int oldCapacity = elementData.length;
+        // 新容量是翻了一倍
+        int newCapacity = oldCapacity + (oldCapacity >> 1);
+        // 如果新的容量还是小于最小容量，则最新容量更新为最小容量
+        if (newCapacity - minCapacity < 0)
+            newCapacity = minCapacity;
+        // 如果最新的容量大于最大的容量，则需要调用hugeCapacity函数将容量调小一点
+        if (newCapacity - MAX_ARRAY_SIZE > 0)
+            newCapacity = hugeCapacity(minCapacity);
+        // 底层是调用数组直接复制
+        elementData = Arrays.copyOf(elementData, newCapacity);
+}
+```
+
+里面定义了两个空数组，`EMPTY_ELEMENTDATA`名为空数组,`DEFAULTCAPACITY_EMPTY_ELEMENTDATA`名为默认大小空数组,用来区分是空构造函数还是带参数构造函数构造的`ArrayList`,第一次添加元素的时候使用不同的扩容方式。 之所以是一个空数组，不是null，是因为使用的时候我们需要制定参数的类型，如果是null，那就根本不知道元素类型是什么了。
+
+```java
+private static final Object[] EMPTY_ELEMENTDATA = {};
+private static final Object[] DEFAULTCAPACITY_EMPTY_ELEMENTDATA = {};
+```
+
+还有一个特殊的成员变量`modCount`，这是快速失败机制(`fail_fast`)所需要的，也就是记录修改操作的次数，主要是迭代遍历的时候，防止元素被修改。如果操作前后的修改次数对不上，那么有些操作就是非法的。`transient`表示这个属性不需要自动序列化。
+
+```java
+protected transient int modCount = 0;
+```
+
+#### 线程安全问题
+
+```java
+public boolean add(E e) {
+    //确定添加元素之后，集合的大小是否足够，若不够则会进行扩容
+    ensureCapacityInternal(size + 1);  // Increments modCount!!
+    //插入元素
+    elementData[size++] = e;
+    return true;
+}
+```
+
+场景1：多个线程都没进行扩容，但是执行了`elementData[size++] = e;`时，便会出现“数组越界异常”；
+场景2：因为size++本身就是非原子性的，多个线程之间访问冲突，这时候两个线程可能对同一个位置赋值，就会出现“size小于期望值的结果”；
+
+### LinkedList
+
+LinkedList 是 Java 集合框架中一个重要的实现，其底层采用的**双向链表结构**。和 ArrayList 一样，LinkedList 也支持空值和重复值。
+
+由于 LinkedList 基于链表实现，存储元素过程中，无需像 ArrayList 那样进行扩容。但有得必有失，LinkedList 存储元素的节点需要**额外的空间**存储前驱和后继的引用。另一方面，LinkedList 在链表**头部和尾部插入效率比较高**，但在**指定位置进行插入时，效率一般**。原因是，在指定位置插入需要定位到该位置处的节点，此操作的时间复杂度为`O(N)`。最后，LinkedList 是非线程安全的集合类，并发环境下，多个线程同时操作 LinkedList，会引发不可预知的错误。
+
+LinkedList 继承自 **AbstractSequentialList**，AbstractSequentialList 又是什么呢？从实现上，AbstractSequentialList 提供了一套基于顺序访问的接口。通过继承此类，子类仅需实现部分代码即可拥有完整的一套访问某种序列表（比如链表）的接口。深入源码，AbstractSequentialList 提供的方法基本上都是通过 ListIterator 实现的，比如：
+
+#### 线程安全问题
+
+现在有3个结点n1、n2、n3。标记指针header的头结点指针first指向n1，尾结点指针last指向n3。
+
+假如线程A、线程B同时要做add操作。
+
+1.线程A找到last结点。
+
+2.线程B找到last结点。（此时A、B找到的last结点是一样的）
+
+3.线程A：新结点n4的previous设为last结点，之前的last结点的next设为新结点n4。size+1=4
+
+4.线程B:新结点n5的previous设为last结点，之前的last结点的next设为新结点n5。size+1=5
+
+此时，会出现这种情况：
+
+
+![img](https://cdn.jsdelivr.net/gh/WangMinan/Pics/20210729154417515.png)
+
+n3的next指向n5，header的last指向n5，直接跳过n4结点
+
+### Vector
+
+通过观察源码，发现 Vector 类中的大部分方法都是由 synchronized 关键字来修饰的，这也就保证了所有的对外接口都会以 Vector 对象为锁。访问 Vector 的任何方法都必须获得对象的 intrinsic lock (或叫 monitor lock )，所以在Vector内部，所有的方法都不会被多线程访问。
+![在这里插入图片描述](https://cdn.jsdelivr.net/gh/WangMinan/Pics/9c1218672787412283a0ff073be2e79d.png)
+
+但单个方法的原子性不代表复合操作也具有原子性。例如在Vector中一边插入一边删除时即存在线程安全问题。
+
+要真正达成线程安全，还需要以 Vector 对象为锁，来进行同步处理。
+
+### 一些解决方案
+
+#### Vector和Collections.SynchronizedList的get方法要加锁
+
+Vector和Collections.SynchronizedList的get方法加了synchronized后可以保证顺序性与实时一致性，当一个线程在读取数据时，一定可以看到其他线程解锁前写入的全部数据。
+
+Vector和Collections.SynchronizedList的数组并没有用volatile修饰，如果不加锁，也无法保证可见性。
+
+#### 线程安全的三种List
+
+```java
+//方法上使用sync关键字（读写均加锁）
+Vector vector = new Vector();
+//写操作每一次均copy一个数组，读操作不加锁（写加锁性能低，读不加锁性能极高）
+CopyOnWriteArrayList<Integer> r2 = new CopyOnWriteArrayList<>();
+//使用sync代码块装饰传入List的读写操作（读写均加锁）
+List<String> r3 = Collections.synchronizedList(new ArrayList<>());
+```
+
++ Vector/Collections.synchronizedList：读写均加锁，来实现线程安全；
++ CopyOnWriteArrayList基于写时复制技术实现的，读操作无锁（读取快照），写操作有锁，体现了读写分离的思想，但是无法提供实时一致性。
