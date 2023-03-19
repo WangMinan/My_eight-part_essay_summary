@@ -270,6 +270,53 @@ https://blog.csdn.net/txk396879586/article/details/122428293
 
 ## HashMap
 
+### 基本原理
+
+#### 索引的计算
+
+对hash有
+$$
+hash = x \% 2^n = x \& (2^n-1)
+$$
+此公式当且仅当capacity为$2^n$时有效
+
+如果追求扩容效率，应当选用$2^n$作为capacity；如果追求分布性，则最好选用质数作为capacity。
+
+选用质数作为capacity不需要经过二次哈希。
+
+#### 二次哈希
+
++ 不二次哈希的后果
+
+  标准的一次哈希移位运算
+
+  ```java
+  static int indexFor(int h, int length) {
+      return h & (length-1);
+  }
+  ```
+
+  **哈希码的高位压根就没有参与运算**，全部被丢弃了。不管哈希码的高位是多少，都不会影响最终Index的计算结果，因为只有低位才参与了运算，这样的哈希函数我们认为是不好的，它会带来更多的冲突，影响HashMap的效率。
+
++ 二次哈希
+
+  要求高位也参与运算
+
+  二次哈希的过程是这样的：首先，根据key对象的hashCode()方法得到一个32位的整数值（称为原始哈希码），然后对这个整数值进行高低位异或运算（称为二次哈希），最后用这个异或后的结果与HashMap容量减一进行按位与运算，得到最终的数组下标
+
+  ```java
+  static final int hash(Object key) {
+      int h;
+      return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
+  }
+  ```
+
+  HashMap通过将哈希码的高16位与低16位进行异或运算，得到一个新的哈希码，这样就可以让高位也参与到运算，这个函数也被称作**扰动函数**。
+
+  + 右移16位的原因
+
+    根据哈希码计算下标Index的过程，大家也发现了。实际上，只有数组长度以内的低位才会参与运算。例如数组长度是16，那么只有低4位会参与计算；如果数组长度是256，那么只有低8位会参与计算；**如果数组长度是65536，那么只有低16位会参与计算**。HashMap取16位是一个折中的数字，绝大部分情况下，HashMap数组的长度都不会超过65536。
+
 ### HashMap的扩容机制
 
 - capacity 即容量，默认16。
@@ -282,6 +329,8 @@ https://blog.csdn.net/txk396879586/article/details/122428293
 
 #### JDK7中的扩容机制
 
+7中的HashMap由数组+链表组成
+
 JDK7的扩容机制相对简单，有以下特性：
 
 - 空参数的构造函数：以默认容量、默认负载因子、默认阈值初始化数组。内部数组是**空数组**。
@@ -292,6 +341,8 @@ JDK7的扩容机制相对简单，有以下特性：
 #### JDK8的扩容机制
 
 JDK8的扩容做了许多调整。
+
+8中的HashMap由数组+链表/红黑树组成
 
 HashMap的容量变化通常存在以下几种情况：
 
@@ -308,9 +359,15 @@ HashMap的容量变化通常存在以下几种情况：
 
 在map**数组长度超过64且链表长度超过8后**，HashMap的实现由数组+链表转为数组+**红黑树**，**8**被称为树化标准长度
 
+低长度下使用链表的原因：链表底层为Node，红黑树底层为TreeNode。红黑树节点比链表更消耗内存。树化是极偶然情况。
+
 + 红黑树的特点：父节点的一侧都是比父节点小的元素，父节点的另一侧都是比父节点大的元素，搜索时间复杂度为O(log2n)
 
   ![image-20230318221647352](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230318221647352.png)
+
+![image-20230319104844782](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230319104844782.png)
+
+有关退化情况2，对根节点左孩子、右孩子与左孙子的检查发生在节点移除前。
 
 
 
@@ -327,21 +384,21 @@ https://cloud.tencent.com/developer/article/1631902
 JDK7
 
 ```java
- 1    void transfer(Entry[] newTable, boolean rehash) {
- 2         int newCapacity = newTable.length;
- 3         for (Entry<K,V> e : table) {
- 4             while(null != e) {
- 5                 Entry<K,V> next = e.next;
- 6                 if (rehash) {
- 7                     e.hash = null == e.key ? 0 : hash(e.key);
- 8                 }
- 9                 int i = indexFor(e.hash, newCapacity);
-10                 e.next = newTable[i];
-11                 newTable[i] = e;
-12                 e = next;
-13             }
-14         }
-15     }
+void transfer(Entry[] newTable, boolean rehash) {
+    int newCapacity = newTable.length;
+    for (Entry<K,V> e : table) {
+      while(null != e) {
+          	Entry<K,V> next = e.next;
+	        if (rehash) {
+            	e.hash = null == e.key ? 0 : hash(e.key);
+          	}
+          	int i = indexFor(e.hash, newCapacity);
+         	e.next = newTable[i];
+         	newTable[i] = e;
+        	e = next;
+		}
+    }
+}
 ```
 
 在对table进行扩容到newTable后，需要将原来数据转移到newTable中，注意10-12行代码，这里可以看出在转移元素的过程中，使用的是头插法，也就是链表的顺序会翻转，这里也是形成死循环的关键点。
@@ -353,48 +410,48 @@ JDK8
 在jdk1.8中对HashMap进行了优化，在发生hash碰撞，不再采用头插法方式，而是直接插入链表尾部，因此不会出现环形链表的情况，但是在多线程的情况下仍然不安全，这里我们看jdk1.8中HashMap的put操作源码：
 
 ```java
- 1  final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
- 2                    boolean evict) {
- 3         Node<K,V>[] tab; Node<K,V> p; int n, i;
- 4         if ((tab = table) == null || (n = tab.length) == 0)
- 5             n = (tab = resize()).length;
- 6         if ((p = tab[i = (n - 1) & hash]) == null) // 如果没有hash碰撞则直接插入元素
- 7             tab[i] = newNode(hash, key, value, null);
- 8         else {
- 9             Node<K,V> e; K k;
-10             if (p.hash == hash &&
-11                 ((k = p.key) == key || (key != null && key.equals(k))))
-12                 e = p;
-13             else if (p instanceof TreeNode)
-14                 e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
-15             else {
-16                 for (int binCount = 0; ; ++binCount) {
-17                     if ((e = p.next) == null) {
-18                         p.next = newNode(hash, key, value, null);
-19                         if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st
-20                             treeifyBin(tab, hash);
-21                         break;
-22                     }
-23                     if (e.hash == hash &&
-24                         ((k = e.key) == key || (key != null && key.equals(k))))
-25                         break;
-26                     p = e;
-27                 }
-28             }
-29             if (e != null) { // existing mapping for key
-30                 V oldValue = e.value;
-31                 if (!onlyIfAbsent || oldValue == null)
-32                     e.value = value;
-33                 afterNodeAccess(e);
-34                 return oldValue;
-35             }
-36         }
-37         ++modCount;
-38         if (++size > threshold)
-39             resize();
-40         afterNodeInsertion(evict);
-41         return null;
-42 }
+final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
+                boolean evict) {
+     Node<K,V>[] tab; Node<K,V> p; int n, i;
+     if ((tab = table) == null || (n = tab.length) == 0)
+         n = (tab = resize()).length;
+     if ((p = tab[i = (n - 1) & hash]) == null) // 如果没有hash碰撞则直接插入元素
+         tab[i] = newNode(hash, key, value, null);
+     else {
+         Node<K,V> e; K k;
+         if (p.hash == hash &&
+             ((k = p.key) == key || (key != null && key.equals(k))))
+             e = p;
+         else if (p instanceof TreeNode)
+             e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
+         else {
+             for (int binCount = 0; ; ++binCount) {
+                 if ((e = p.next) == null) {
+                     p.next = newNode(hash, key, value, null);
+                     if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st
+                         treeifyBin(tab, hash);
+                     break;
+                 }
+                 if (e.hash == hash &&
+                     ((k = e.key) == key || (key != null && key.equals(k))))
+                     break;
+                 p = e;
+             }
+         }
+         if (e != null) { // existing mapping for key
+             V oldValue = e.value;
+             if (!onlyIfAbsent || oldValue == null)
+                 e.value = value;
+             afterNodeAccess(e);
+             return oldValue;
+         }
+     }
+     ++modCount;
+     if (++size > threshold)
+         resize();
+     afterNodeInsertion(evict);
+     return null;
+}
 ```
 
 这是jdk1.8中HashMap中put操作的主函数， 注意第6行代码，如果没有hash碰撞则会直接插入元素。**如果线程A和线程B同时进行put操作，刚好这两条不同的数据hash值一样，并且该位置数据为null，所以这线程A、B都会进入第6行代码中。**假设一种情况，线程A进入后还未进行数据插入时挂起，而线程B正常执行，从而正常插入数据，然后线程A获取CPU时间片，此时线程A不用再进行hash判断了，问题出现：线程A会把线程B插入的数据给**覆盖**，发生线程不安全。
