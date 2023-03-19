@@ -4,6 +4,69 @@
     </h1>
 </div>
 
+## String, StringBuffer与StringBuilder
+
+![三者关系](https://cdn.jsdelivr.net/gh/WangMinan/Pics/20200226214858667.png)
+
+### String效率低的原因
+
+在以类似于以下的方式进行字符串拼接时
+
+```java
+String str="abc";
+System.out.println(str);
+str=str+"de";
+System.out.println(str);
+```
+
+JVM的处理方式为：
+
+首先创建一个String对象str，并把“abc”赋值给str，然后在第三行中，其实JVM又创建了一个新的对象也名为str，然后再把原来的str的值和“de”加起来再赋值给新的str，而原来的str就会被JVM的垃圾回收机制（GC）给回收掉了。
+
+由于拼接过程中的**GC**，导致直接使用String进行字符串拼接的效率比较低。
+
+### StringBuffer线程安全的原因
+
+StringBuffer中很多方法可以带有`synchronized`关键字，所以可以保证线程是安全的
+
++ StringBuffer-append
+
+  ```java
+  @Override
+  public synchronized StringBuffer append(String str) {
+      toStringCache = null;
+      super.append(str);
+      return this;
+  }
+  ```
+
++ StringBuffer-toString
+
+  ```java
+  private transient char[] toStringCache;
+  
+  @Override
+  public synchronized String toString() {
+      if (toStringCache == null) {
+          // 涉及到字符串长度确认
+          toStringCache = Arrays.copyOfRange(value, 0, count);
+      }
+      return new String(toStringCache, true);
+  }
+  ```
+
++ StringBuilder-toString
+
+  ```java
+  @Override
+  public String toString() {
+      // Create a copy, don't share the array
+      return new String(value, 0, count);
+  }
+  ```
+
+  
+
 ## Thread类
 
 ### 线程暂停的方法
@@ -37,6 +100,84 @@ sleep()方法导致了程序暂停执行指定的时间，让出CPU给其他线�
 sleep可以在任何地方使用，而wait只能在同步方法或者同步块中使用。
 
 ![Sleep VS Wait](https://cdn.jsdelivr.net/gh/WangMinan/Pics/2019050816141738.png)
+
+
+
+### lock和synchronized的区别
+
+**要求**
+
+* 掌握 lock 与 synchronized 的区别
+* 理解 ReentrantLock 的公平、非公平锁
+* 理解 ReentrantLock 中的条件变量
+
+**三个层面**
+
+不同点
+
+* 语法层面
+  * synchronized 是关键字，源码在 jvm 中，用 c++ 语言实现
+  * Lock 是接口，源码由 jdk 提供，用 java 语言实现
+  * 使用 synchronized 时，退出同步代码块锁会自动释放，而使用 Lock 时，需要手动调用 unlock 方法释放锁
+* 功能层面
+  * 二者均属于悲观锁、都具备基本的互斥、同步、锁重入功能
+  * Lock 提供了许多 synchronized 不具备的功能，例如获取等待状态、公平锁、可打断、可超时、多条件变量
+  * Lock 有适合不同场景的实现，如 ReentrantLock， ReentrantReadWriteLock
+* 性能层面
+  * 在没有竞争时，synchronized 做了很多优化，如偏向锁、轻量级锁，性能不赖
+  * 在竞争激烈时，Lock 的实现通常会提供更好的性能
+
+**公平锁**
+
+* 公平锁的公平体现
+  * **已经处在阻塞队列**中的线程（不考虑超时）始终都是公平的，先进先出
+  * 公平锁是指**未处于阻塞队列**中的线程来争抢锁，如果队列不为空，则老实到队尾等待
+  * 非公平锁是指**未处于阻塞队列**中的线程来争抢锁，与队列头唤醒的线程去竞争，谁抢到算谁的
+* 公平锁会降低吞吐量，一般不用
+
+**条件变量**
+
+* ReentrantLock 中的条件变量功能类似于普通 synchronized 的 wait，notify，用在当线程获得锁后，发现条件不满足时，临时等待的链表结构
+* 与 synchronized 的等待集合不同之处在于，ReentrantLock 中的条件变量可以有多个，可以实现更精细的等待、唤醒控制
+
+#### 可重入锁
+
+可重入就是说某个线程已经获得某个锁，可以再次获取锁而不会出现死锁。
+
+可重入锁有
+
+- synchronized 无须手动释放
+- ReentrantLock 需要手动释放 加锁次数和释放次数要一致 否则死锁
+
+```java
+// 演示可重入锁是什么意思，可重入，就是可以重复获取相同的锁，synchronized和ReentrantLock都是可重入的
+// 可重入降低了编程复杂性
+public class WhatReentrant {
+	public static void main(String[] args) {
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				synchronized (this) {
+					System.out.println("第1次获取锁，这个锁是：" + this);
+					int index = 1;
+					while (true) {
+						synchronized (this) {
+							System.out.println("第" + (++index) + "次获取锁，这个锁是：" + this);
+						}
+						if (index == 10) {
+							break;
+						}
+					}
+				}
+			}
+		}).start();
+	}
+}
+```
+
+实现原理
+
+https://blog.csdn.net/txk396879586/article/details/122428293
 
 
 
@@ -113,7 +254,7 @@ private T setInitialValue() {
 + 方便线程**并发数的管控**，线程若是无限制的创建，不仅会额外消耗大量系统资源，更是占用过多资源而阻塞系统或oom等状况，从而降低系统的稳定性。线程池能有效管控线程，统一分配、调优，提供资源使用率；
 + 更强大的功能，线程池提供了**定时**、定期以及可控线程数等功能的线程池，使用方便简单。
 
-Java中的**四种**线程池
+#### Java中的**四种**线程池
 
 + **newCachedThreadPool**：
   创建一个**可缓存的无界线程池**，如果线程池长度超过处理需要，可灵活回收空线程，若无可回收，则新建线程。当线程池中的线程空闲时间超过60s，则会自动回收该线程，当任务超过线程池的线程数则创建新的线程，线程池的大小上限为**Integer.MAX_VALUE**,可看作无限大。
@@ -223,48 +364,40 @@ Java中的**四种**线程池
 | newSingleThreadExecutor | 1            | 1                 | 0             | LinkedBlockingQueue |
 | newScheduledThreadPool  | corePoolSize | Integer.MAX_VALUE | 0             | DelayedWorkQueue    |
 
+#### 线程池的7个参数
+
++ 核心线程：任务执行完毕后得到保留的线程 corePoolSize指定的线程数量为核心线程数
++ 救急线程：任务执行完毕后即被释放的线程 核心线程全忙且任务队列满时使用
+
+![image-20230319161030197](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230319161030197.png)
+
+**7种拒绝策略**
+
+1. corePoolSize 核心线程数目 - 池中会保留的最多线程数
+2. maximumPoolSize 最大线程数目 - 核心线程+救急线程的最大数目
+3. keepAliveTime 生存时间 - 救急线程的生存时间，生存时间内没有新任务，此线程资源会释放
+4. unit 时间单位 - 救急线程的生存时间单位，如秒、毫秒等
+5. workQueue - 当没有空闲核心线程时，新来任务会加入到此队列排队，队列满会创建救急线程执行任务
+6. threadFactory 线程工厂 - 可以定制线程对象的创建，例如设置线程名字、是否是守护线程等
+7. handler 拒绝策略 - 当所有线程都在繁忙，workQueue 也放满时，会触发拒绝策略
+   1. 抛异常 java.util.concurrent.ThreadPoolExecutor.AbortPolicy
+   2. 由调用者执行任务 java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy
+   3. 丢弃任务 java.util.concurrent.ThreadPoolExecutor.DiscardPolicy
+   4. 丢弃最早排队任务 java.util.concurrent.ThreadPoolExecutor.DiscardOldestPolicy
 
 
-## 线程锁
 
-### 可重入锁
+### 线程的六种状态
 
-可重入就是说某个线程已经获得某个锁，可以再次获取锁而不会出现死锁。
+java中的线程有六种状态
 
-可重入锁有
+<img src="https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230319144606796.png" alt="image-20230319144606796" style="zoom:67%;" />
 
-- synchronized 无须手动释放
-- ReentrantLock 需要手动释放 加锁次数和释放次数要一致 否则死锁
+调用start()后,一个Java线程才由操作系统交由CPU，在CPU上生成一个实际的线程
 
-```java
-// 演示可重入锁是什么意思，可重入，就是可以重复获取相同的锁，synchronized和ReentrantLock都是可重入的
-// 可重入降低了编程复杂性
-public class WhatReentrant {
-	public static void main(String[] args) {
-		new Thread(new Runnable() {
-			@Override
-			public void run() {
-				synchronized (this) {
-					System.out.println("第1次获取锁，这个锁是：" + this);
-					int index = 1;
-					while (true) {
-						synchronized (this) {
-							System.out.println("第" + (++index) + "次获取锁，这个锁是：" + this);
-						}
-						if (index == 10) {
-							break;
-						}
-					}
-				}
-			}
-		}).start();
-	}
-}
-```
+操作系统中的线程有五种状态
 
-实现原理
-
-https://blog.csdn.net/txk396879586/article/details/122428293
+<img src="https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230319154100499.png" alt="image-20230319154100499" style="zoom:67%;" />
 
 
 
@@ -320,16 +453,18 @@ $$
 ### HashMap的扩容机制
 
 - capacity 即容量，默认16。
-- loadFactor 加载因子，默认是0.75
+- loadFactor 加载因子，默认是0.75f
   - 底层是因为泊松分布 我实在是 完全不懂 可以看[从泊松分布谈起HashMap为什么默认扩容因子是0.75 - 知乎 (zhihu.com)](https://zhuanlan.zhihu.com/p/396019103)
   - 如果加载因子过小，那么扩容门槛低，扩容频繁，这虽然能使元素存储得更稀疏，有效避免了哈希冲突发生，同时操作性能较高，但是会占用更多的空间。
   - 如果加载因子过大，那么扩容门槛高，扩容不频繁，虽然占用的空间降低了，但是这会导致元素存储密集，发生哈希冲突的概率大大提高，从而导致存储元素的数据结构更加复杂（用于解决哈希冲突），最终导致操作性能降低。
   - 还有一个因素是为了提升扩容效率。因为`HashMap`的容量（`size`属性，构造函数中的`initialCapacity`变量）有一个要求：它一定是2的幂。所以加载因子选择了0.75就可以保证它与容量的乘积为整数。
 - threshold 阈值。阈值=容量*加载因子。默认12。当元素数量超过阈值时便会触发扩容
 
+![image-20230319141219881](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230319141219881.png)
+
 #### JDK7中的扩容机制
 
-7中的HashMap由数组+链表组成
+7中的HashMap由数组+链表组成 头插法 **大于等于阈值且没有空位(插入时会发生哈希碰撞)才扩容**
 
 JDK7的扩容机制相对简单，有以下特性：
 
@@ -342,7 +477,7 @@ JDK7的扩容机制相对简单，有以下特性：
 
 JDK8的扩容做了许多调整。
 
-8中的HashMap由数组+链表/红黑树组成
+8中的HashMap由数组+链表/红黑树组成 尾插法 **大于阈值就扩容**
 
 HashMap的容量变化通常存在以下几种情况：
 
@@ -401,13 +536,13 @@ void transfer(Entry[] newTable, boolean rehash) {
 }
 ```
 
-在对table进行扩容到newTable后，需要将原来数据转移到newTable中，注意10-12行代码，这里可以看出在转移元素的过程中，使用的是头插法，也就是链表的顺序会翻转，这里也是形成死循环的关键点。
+在对table进行扩容到newTable后，需要将原来数据转移到newTable中，注意10-12行代码，这里可以看出在转移元素的过程中，使用的是**头插法**，也就是链表的顺序会翻转，这里也是形成死循环的关键点。
 
 当一个线程阻塞在11行而另一个线程完成重hash之后会形成环形链表
 
 JDK8
 
-在jdk1.8中对HashMap进行了优化，在发生hash碰撞，不再采用头插法方式，而是直接插入链表尾部，因此不会出现环形链表的情况，但是在多线程的情况下仍然不安全，这里我们看jdk1.8中HashMap的put操作源码：
+在jdk1.8中对HashMap进行了优化，在发生hash碰撞，不再采用头插法方式，而是**直接插入链表尾部**，因此不会出现环形链表的情况，但是在多线程的情况下仍然不安全，这里我们看jdk1.8中HashMap的put操作源码：
 
 ```java
 final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
@@ -466,7 +601,7 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
 
 
 
-## List及其子类的线程安全问题
+## List及其子类
 
 ### ArrayList
 
@@ -572,7 +707,7 @@ n3的next指向n5，header的last指向n5，直接跳过n4结点
 
 要真正达成线程安全，还需要以 Vector 对象为锁，来进行同步处理。
 
-### 一些解决方案
+### 线程安全的一些解决方案
 
 #### Vector和Collections.SynchronizedList的get方法要加锁
 
