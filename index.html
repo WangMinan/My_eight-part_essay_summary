@@ -12,9 +12,6 @@
     <!-- <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css"> -->
     <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.css" />
     <link rel="shortcut icon" href="_media/favicon.ico">
-
-    <!-- GitTalk评论 -->
-    <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/gitalk/dist/gitalk.css">
   </head>
   <body>
 
@@ -88,23 +85,6 @@
     <!-- 侧边栏折叠 -->
     <script src="//cdn.jsdelivr.net/npm/docsify-sidebar-collapse/dist/docsify-sidebar-collapse.min.js"></script>
 
-    <!-- gitalk -->
-    <!-- <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/gitalk.min.js"></script>
-    <script src="//cdn.jsdelivr.net/npm/gitalk/dist/gitalk.min.js"></script>
-    
-    <script>
-      const gitalk = new Gitalk({
-        clientID: '61d4c45f2889ac2d9bc2',
-        clientSecret: '79983fa4cd95b488a7a74a8a094a47280b691d23',
-        repo: 'my_eight-part_essay_summary',
-          owner: 'WangMinan',
-          admin: ['WangMinan'],
-        // facebook-like distraction free mode
-        distractionFreeMode: false,
-        id: decodeURI(window.location.href).split('#')[0]
-      })
-    </script> -->
-
     <script type="text/javascript">
       // 使用document.ready时dom树未加载完全
       window.onload = function(){
@@ -112,7 +92,7 @@
         var utterances = document.createElement('script');
         utterances.type = 'text/javascript';
         utterances.async = true;
-        utterances.setAttribute('issue-term','pathname')
+        utterances.setAttribute('issue-term','title')
         utterances.setAttribute('theme','github-light')
         utterances.setAttribute('repo','WangMinan/my_eight-part_essay_summary')
         utterances.crossorigin = 'anonymous';
