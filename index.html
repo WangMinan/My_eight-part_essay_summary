@@ -46,13 +46,13 @@
     <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-sql.min.js"></script>
     <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
     <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-properties.min.js"></script>
-    <!-- <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/matlab.min.js"></script> -->
 
     <!-- latex -->
     <script src="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.js"></script>
     <script src="//cdn.jsdelivr.net/npm/docsify-latex@0"></script>
 
     <div id="app">🏃‍🏃‍🏃‍💨加载中...</div>
+
     <script>
       window.$docsify = {
         themeColor: '#409EFF',
@@ -91,6 +91,7 @@
     <!-- gitalk -->
     <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/gitalk.min.js"></script>
     <script src="//cdn.jsdelivr.net/npm/gitalk/dist/gitalk.min.js"></script>
+    
     <script>
       const gitalk = new Gitalk({
         clientID: '61d4c45f2889ac2d9bc2',
@@ -100,9 +101,8 @@
           admin: ['WangMinan'],
         // facebook-like distraction free mode
         distractionFreeMode: false,
-        id: decodeURI(window.location.pathname),
+        id: decodeURI(window.local.href).split('#')[1],
       })
     </script>
-
   </body>
 </html>
