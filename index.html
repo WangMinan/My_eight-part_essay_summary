@@ -101,8 +101,8 @@
           admin: ['WangMinan'],
         // facebook-like distraction free mode
         distractionFreeMode: false,
-        // 使用正则表达式获取http://localhost:3000/#/Java八股整理?id=list及其子类 中的'#/'后'?'前的部分
-        id: decodeURI(window.location.href).match(/#\/(.*)\?/)[1],
+        // 使用正则表达式获取http://localhost:3000/#/Java八股整理?id=list及其子类 中的'#'后'?'前的部分
+        id: decodeURI(window.location.href).match(/#\/(.*)\?/) === null ? 'HOME' : decodeURI(window.location.href).match(/#\/(.*)\?/)[1],
       })
     </script>
   </body>
