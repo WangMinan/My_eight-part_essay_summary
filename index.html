@@ -12,26 +12,19 @@
     <!-- <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css"> -->
     <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.css" />
     <link rel="shortcut icon" href="_media/favicon.ico">
+
+    <!-- GitTalk评论 -->
+    <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/gitalk/dist/gitalk.css">
   </head>
   <body>
-    <div id="app">🏃‍🏃‍🏃‍💨加载中...</div>
-    <script>
-      window.$docsify = {
-        themeColor: '#409EFF',
-        name: '<span>Docsify-<strong>我的八股文整理</strong></span>',
-        repo: 'https://github.com/WangMinan/My_eight-part_essay_summary',
-        loadSidebar: true,
-        subMaxLevel: 5,
-        auto2top: true,
-      }
-    </script>
 
-    <!-- 侧边栏折叠 -->
-    <script src="//cdn.jsdelivr.net/npm/docsify-sidebar-collapse/dist/docsify-sidebar-collapse.min.js"></script>
+    <!-- edit on github -->
+    <script src="//unpkg.com/docsify-edit-on-github/index.js"></script>
+
     <!-- docsify的js依赖 -->
     <script src="//cdn.jsdelivr.net/npm/docsify/lib/docsify.min.js"></script>
     <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/emoji.min.js"></script>
-    <script src="//unpkg.com/docsify-count/dist/countable.js"></script>
+    
     <!--在所有的代码块上添加一个简单的Click to copy按钮来允许用户从你的文档中轻易地复制代码-->
     <script src="//cdn.jsdelivr.net/npm/docsify-copy-code/dist/docsify-copy-code.min.js"></script>
     <!-- Docsify v4 -->
@@ -58,6 +51,58 @@
     <!-- latex -->
     <script src="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.js"></script>
     <script src="//cdn.jsdelivr.net/npm/docsify-latex@0"></script>
+
+    <div id="app">🏃‍🏃‍🏃‍💨加载中...</div>
+    <script>
+      window.$docsify = {
+        themeColor: '#409EFF',
+        name: '<span>Docsify-<strong>我的八股文整理</strong></span>',
+        repo: 'https://github.com/WangMinan/My_eight-part_essay_summary',
+        loadSidebar: true,
+        subMaxLevel: 5,
+        auto2top: true,
+        plugins:[
+          EditOnGithubPlugin.create(
+            'https://github.com/WangMinan/my_eight-part_essay_summary',
+            null,
+            function(file) {
+                if (file.indexOf('en') === -1) {
+                  return '✏️在Github上编辑'
+                } else {
+                  return 'edit on git'
+                }
+            }
+          )
+        ],
+        count:{
+          countable:true,
+          fontsize:'0.9em',
+          color:'rgb(90,90,90)',
+          language:'chinese'
+        }
+      }
+    </script>
+
+    <!-- 字数统计 -->
+    <script src="//unpkg.com/docsify-count/dist/countable.js"></script>
+    <!-- 侧边栏折叠 -->
+    <script src="//cdn.jsdelivr.net/npm/docsify-sidebar-collapse/dist/docsify-sidebar-collapse.min.js"></script>
+
+    <!-- gitalk -->
+    <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/gitalk.min.js"></script>
+    <script src="//cdn.jsdelivr.net/npm/gitalk/dist/gitalk.min.js"></script>
+    <script>
+      const gitalk = new Gitalk({
+        clientID: '61d4c45f2889ac2d9bc2',
+        clientSecret: '79983fa4cd95b488a7a74a8a094a47280b691d23',
+        repo: 'my_eight-part_essay_summary',
+          owner: 'WangMinan',
+          admin: ['WangMinan'],
+        // facebook-like distraction free mode
+        distractionFreeMode: false,
+        id: decodeURI(window.location.pathname),
+      })
+    </script>
 
   </body>
 </html>
