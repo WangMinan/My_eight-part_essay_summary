@@ -68,7 +68,21 @@ StringBuffer中很多方法可以带有`synchronized`关键字，所以可以保
 
   
 
-## Thread类
+## Thread类与多线程
+
+### 线程的六种状态
+
+java中的线程有六种状态
+
+<img src="https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230319144606796.png" alt="image-20230319144606796" style="zoom:67%;" />
+
+调用start()后,一个Java线程才由操作系统交由CPU，在CPU上生成一个实际的线程
+
+操作系统中的线程有五种状态
+
+<img src="https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230319154100499.png" alt="image-20230319154100499" style="zoom:67%;" />
+
+
 
 ### 线程暂停的方法
 
@@ -104,7 +118,15 @@ sleep可以在任何地方使用，而wait只能在同步方法或者同步块�
 
 
 
-### lock和synchronized的区别
+### Lock和Synchronized的区别
+
+#### Synchronized关键字
+
+当一个线程访问某个对象的synchronized方法或synchronized代码块时，其他线程仍然可以访问该对象的非同步代码块。但是，当一个线程访问某个对象的synchronized方法或synchronized代码块时，**其他线程将被阻塞**，直到该线程执行完该方法或该代码块 。这是因为synchronized关键字可以保证**在同一个时刻，只有一个线程可以执行某个方法或某个代码块**(主要是对方法或者代码块中存在共享数据的操作)，同时synchronized还可以保证一个线程的变化(主要是共享数据的变化)被其他线程所看到，保证可见性。(Volatile也会干这个)
+
+
+
+#### Lock与Sychronized的区别
 
 **要求**
 
@@ -182,7 +204,20 @@ https://blog.csdn.net/txk396879586/article/details/122428293
 
 
 
-### Volatile
+### Volatile关键字
+
+"Java语言提供了一种**稍弱的同步机制**，即volatile变量，用来确保将变量的更新操作通知到其他线程"。
+
+这句话说明了两点：①volatile变量**是一种同步机制**；②volatile能够**确保可见性**。->Volatile不能保证线程安全
+
+Java对定义了8种操作内存的方式
+
+lock:(锁定)，unlock(解锁)，read(读取)，load(载入)，use(试用)， assign(赋值)，store(存储)，write(写入)。
+
+volatile 对这八种操作有着两个特殊的限定
+
++ use动作之前必须要有read和load动作， 这三个动作必须是连续出现的。【表示：每次工作内存要使用volatile变量之前必须去主存中**拿取最新的volatile变量**】
++ assign动作之后必须跟着store和write动作，这三个动作必须是连续出现的。【表示: 每次工作内存改变了volatile变量的值，就必须把该值**写回到主存中**】
 
 **要求**
 
@@ -196,17 +231,25 @@ https://blog.csdn.net/txk396879586/article/details/122428293
 
 **可见性**
 
-* 起因：由于**编译器优化、或缓存优化、或 CPU 指令重排序优化**导致的对共享变量所做的修改另外的线程看不到
-* 解决：用 volatile 修饰共享变量，能够防止编译器等优化发生，让一个线程对共享变量的修改对另一个线程可见
+* 起因：由于**编译器优化(JIT)、或缓存优化、或 CPU 指令重排序优化**导致的对共享变量所做的修改另外的线程看不到
+* 解决：用 volatile 修饰共享变量，能够**防止编译器等优化发生**，让一个线程对共享变量的修改对另一个线程可见
 
 **有序性**
 
 * 起因：由于**编译器优化、或缓存优化、或 CPU 指令重排序优化**导致指令的实际执行顺序与编写顺序不一致
+
 * 解决：用 volatile 修饰共享变量会在读、写共享变量时加入不同的屏障，阻止其他读写操作越过屏障，从而达到阻止重排序的效果
+
 * 注意：
-  * **volatile 变量写**加的屏障是阻止上方其它写操作越过屏障排到 **volatile 变量写**之下
-  * **volatile 变量读**加的屏障是阻止下方其它读操作越过屏障排到 **volatile 变量读**之上
+  * **volatile 变量写**加的屏障是阻止上方其它写操作越过屏障排到 **volatile 变量写**之下(写入时volatile变量应当最后写入)
+  
+  * **volatile 变量读**加的屏障是阻止下方其它读操作越过屏障排到 **volatile 变量读**之上(要读时volatile变量应当最先读取)
+  
   * volatile 读写加入的屏障只能防止同一线程内的指令重排
+  
+    <img src="https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230321152249734.png" alt="image-20230321152249734" style="zoom:67%;" />
+
+
 
 
 
@@ -413,20 +456,6 @@ private T setInitialValue() {
    2. 由调用者执行任务 java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy
    3. 丢弃任务 java.util.concurrent.ThreadPoolExecutor.DiscardPolicy
    4. 丢弃最早排队任务 java.util.concurrent.ThreadPoolExecutor.DiscardOldestPolicy
-
-
-
-### 线程的六种状态
-
-java中的线程有六种状态
-
-<img src="https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230319144606796.png" alt="image-20230319144606796" style="zoom:67%;" />
-
-调用start()后,一个Java线程才由操作系统交由CPU，在CPU上生成一个实际的线程
-
-操作系统中的线程有五种状态
-
-<img src="https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230319154100499.png" alt="image-20230319154100499" style="zoom:67%;" />
 
 
 
@@ -643,6 +672,8 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
 
 如果需要线程安全，则需要选择其他的类或者使用`Collections.synchronizedList(arrayList)`
 
+
+
 #### private常量
 
 如果我们创建的时候不指定大小，那么就会初始化一个默认大小为10,`DEFAULT_CAPACITY`就是默认大小。
@@ -683,6 +714,8 @@ private static final Object[] DEFAULTCAPACITY_EMPTY_ELEMENTDATA = {};
 protected transient int modCount = 0;
 ```
 
+
+
 #### 线程安全问题
 
 ```java
@@ -698,6 +731,8 @@ public boolean add(E e) {
 场景1：多个线程都没进行扩容，但是执行了`elementData[size++] = e;`时，便会出现“数组越界异常”；
 场景2：因为size++本身就是非原子性的，多个线程之间访问冲突，这时候两个线程可能对同一个位置赋值，就会出现“size小于期望值的结果”；
 
+
+
 ### LinkedList
 
 LinkedList 是 Java 集合框架中一个重要的实现，其底层采用的**双向链表结构**。和 ArrayList 一样，LinkedList 也支持空值和重复值。
@@ -705,6 +740,8 @@ LinkedList 是 Java 集合框架中一个重要的实现，其底层采用的**�
 由于 LinkedList 基于链表实现，存储元素过程中，无需像 ArrayList 那样进行扩容。但有得必有失，LinkedList 存储元素的节点需要**额外的空间**存储前驱和后继的引用。另一方面，LinkedList 在链表**头部和尾部插入效率比较高**，但在**指定位置进行插入时，效率一般**。原因是，在指定位置插入需要定位到该位置处的节点，此操作的时间复杂度为`O(N)`。最后，LinkedList 是非线程安全的集合类，并发环境下，多个线程同时操作 LinkedList，会引发不可预知的错误。
 
 LinkedList 继承自 **AbstractSequentialList**，AbstractSequentialList 又是什么呢？从实现上，AbstractSequentialList 提供了一套基于顺序访问的接口。通过继承此类，子类仅需实现部分代码即可拥有完整的一套访问某种序列表（比如链表）的接口。深入源码，AbstractSequentialList 提供的方法基本上都是通过 ListIterator 实现的，比如：
+
+
 
 #### 线程安全问题
 
@@ -727,6 +764,8 @@ LinkedList 继承自 **AbstractSequentialList**，AbstractSequentialList 又是�
 
 n3的next指向n5，header的last指向n5，直接跳过n4结点
 
+
+
 ### Vector
 
 通过观察源码，发现 Vector 类中的大部分方法都是由 synchronized 关键字来修饰的，这也就保证了所有的对外接口都会以 Vector 对象为锁。访问 Vector 的任何方法都必须获得对象的 intrinsic lock (或叫 monitor lock )，所以在Vector内部，所有的方法都不会被多线程访问。
@@ -736,6 +775,8 @@ n3的next指向n5，header的last指向n5，直接跳过n4结点
 
 要真正达成线程安全，还需要以 Vector 对象为锁，来进行同步处理。
 
+
+
 ### 线程安全的一些解决方案
 
 #### Vector和Collections.SynchronizedList的get方法要加锁
@@ -743,6 +784,8 @@ n3的next指向n5，header的last指向n5，直接跳过n4结点
 Vector和Collections.SynchronizedList的get方法加了synchronized后可以保证顺序性与实时一致性，当一个线程在读取数据时，一定可以看到其他线程解锁前写入的全部数据。
 
 Vector和Collections.SynchronizedList的数组并没有用volatile修饰，如果不加锁，也无法保证可见性。
+
+
 
 #### 线程安全的三种List
 
@@ -756,4 +799,4 @@ List<String> r3 = Collections.synchronizedList(new ArrayList<>());
 ```
 
 + Vector/Collections.synchronizedList：读写均加锁，来实现线程安全；
-+ CopyOnWriteArrayList基于写时复制技术实现的，读操作无锁（读取快照），写操作有锁，体现了读写分离的思想，但是无法提供实时一致性。
++ CopyOnWriteArrayList基于写时复制技术实现的，读操作无锁（读取快照），写操作有锁，体现了读写分离的思想，但是无法提供实时一致性
