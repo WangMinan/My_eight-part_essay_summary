@@ -5,7 +5,41 @@
 </div>
 
 
-## String, StringBuffer与StringBuilder
+## 强引用和弱引用
+
+### 强引用
+
+强引用就是我们经常使用的引用，其写法如下
+
+```java
+StringBuffer buffer = new StringBuffer();
+```
+
+上面创建了一个`StringBuffer`对象，并将这个对象的（强）引用存到变量buffer中。是的，就是这个小儿科的操作（请原谅我这样的说 法）。强引用最重要的就是它能够让引用变得强（Strong），这就决定了它和垃圾回收器的交互。具体来说，如果一个对象通过一串强引用链接可到达 (Strongly reachable)，**它是不会被回收的**。如果你不想让你正在使用的对象被回收，这就正是你所需要的。
+
+在 Java 中最常见的就是强引用，把一个对象赋给一个引用变量，这个引用变量就是一个强引用。当一个对象被强引用变量引用时，它处于可达状态，它是不可能被垃圾回收机制回收的，即使该对象以后永远都不会被用到JVM 也不会回收。因此强引用是造成Java 内存泄漏的主要原因之一。
+
+
+
+### 弱引用
+
+弱引用需要用`WeakReference`类来实现，它比软引用的生存期更短，对于只有弱引用的对象来说，只要垃圾回收机制一运行，不管 JVM 的内存空间是否足够，总会回收该对象占用的内存。
+
+弱引用简单来说就是将对象留在内存的能力不是那么强的引用。使用`WeakReference`，垃圾回收器会帮你来决定引用的对象何时回收并且将对象从内存移除。创建弱引用如下
+
+```java
+WeakReference<Widget> weakWidget = new WeakReference<Widget>(widget);
+```
+
+使用`weakWidget.get()`就可以得到真实的Widget对象，因为弱引用不能阻挡垃圾回收器对其回收，你会发现（当没有任何强引用到widget对象时）使用get时突然返回null。
+
+解决上述的widget序列数记录的问题，最简单的办法就是使用Java内置的`WeakHashMap`类。`WeakHashMap`和`HashMap` 几乎一样，唯一的区别就是它的键（不是值!!!）使用`WeakReference`引用。当`WeakHashMap`的键标记为垃圾的时候，这个键对应的条目 就会自动被移除。这就避免了上面不需要的Widget对象手动删除的问题。使用`WeakHashMap`可以很便捷地转为`HashMap`或者`Map`。
+
+虚引用需要`PhantomReference` 类来实现，它不能单独使用，必须和引用队列联合使用。虚引用的主要作用是跟踪对象被垃圾回收的状态。
+
+
+
+## `String`, `StringBuffer`与`StringBuilder`
 
 ![三者关系](https://cdn.jsdelivr.net/gh/WangMinan/Pics/20200226214858667.png)
 
@@ -68,7 +102,7 @@ StringBuffer中很多方法可以带有`synchronized`关键字，所以可以保
 
   
 
-## Thread类与多线程
+## `Thread`类与多线程
 
 ### 线程的六种状态
 
@@ -314,6 +348,33 @@ private T setInitialValue() {
     return value;
 }
 ```
+
+ThreadLocalMap默认的初始capacity为16，factor为2/3.每次扩容capacity翻倍。使用开放寻址解决索引冲突。
+
+ **开放寻址法**：
+
+又称开放定址法，当哈希碰撞发生时，从发生碰撞的那个单元起，按照一定的次序，从哈希表中寻找一个空闲的单元，然后把发生冲突的元素存入到该单元。这个空闲单元又称为开放单元或者空白单元。
+
+查找时，如果探查到空白单元，即表中无待查的关键字，则查找失败。开放寻址法需要的表长度要大于等于所需要存放的元素数量，非常适用于装载因子较小（小于0.5）的散列表。
+
+开放定址法的缺点在于删除元素的时候不能真的删除，否则会引起查找错误，只能做一个特殊标记，直到有下个元素插入才能真正删除该元素。
+
+#### **弱引用 key**
+
+ThreadLocalMap 中的 key 被设计为弱引用，原因如下
+
+* Thread 可能需要长时间运行（如线程池中的线程），如果 key 不再使用，需要在内存不足（GC）时释放其占用的内存
+
+#### **内存释放时机**
+
+* 被动 GC 释放 key
+  * 仅是让 key 的内存释放，关联 value 的内存并不会释放
+* 懒惰被动释放 value
+  * get key 时，发现是 null key，则释放其 value 内存
+  * set key 时，会使用启发式扫描，清除临近的 null key 的 value 内存，启发次数与元素个数，是否发现 null key 有关
+* 主动 remove 释放 key，value
+  * 会同时释放 key，value 的内存，也会清除临近的 null key 的 value 内存
+  * 推荐使用它，因为一般使用 ThreadLocal 时都把它作为静态变量（即强引用），因此无法被动依靠 GC 回收
 
 
 
@@ -653,7 +714,54 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
 
 
 
-### ConcurrentHashMap的底层原理
+### Hashtable vs ConcurrentHashMap
+
+**要求**
+
+* 掌握 Hashtable 与 ConcurrentHashMap 的区别
+* 掌握 ConcurrentHashMap 在不同版本的实现区别
+
+> 更形象的演示，见资料中的 hash-demo.jar，运行需要 jdk14 以上环境，进入 jar 包目录，执行下面命令
+>
+> ```
+> java -jar --add-exports java.base/jdk.internal.misc=ALL-UNNAMED hash-demo.jar
+> ```
+
+#### **Hashtable 对比 ConcurrentHashMap**
+
+* Hashtable 与 ConcurrentHashMap 都是线程安全的 Map 集合
+* Hashtable 并发度低，**整个 Hashtable 对应一把锁**，同一时刻，只能有一个线程操作它
+* ConcurrentHashMap 并发度高，**整个 ConcurrentHashMap 对应多把锁**，只要线程访问的是不同锁，那么不会冲突
+
+#### **ConcurrentHashMap 1.7**
+
+* 数据结构：`Segment(大数组) + HashEntry(小数组) + 链表`，每个 Segment 对应一把锁，如果多个线程访问不同的 Segment，则不会冲突
+* 并发度：Segment 数组大小即并发度，决定了同一时刻最多能有多少个线程并发访问。Segment 数组不能扩容，意味着并发度在 ConcurrentHashMap 创建时就固定了
+* 索引计算
+  * 假设大数组长度是 $2^m$，key 在大数组内的索引是 key 的二次 hash 值的高 m 位
+  * 假设小数组长度是 $2^n$，key 在小数组内的索引是 key 的二次 hash 值的低 n 位
+* 扩容：每个小数组的扩容相对独立，小数组在超过扩容因子时会触发扩容，每次扩容翻倍
+* Segment[0] 原型：首次创建其它小数组时，会以此原型为依据，数组长度，扩容因子都会以原型为准
+
+#### **ConcurrentHashMap 1.8**
+
+* 数据结构：`Node 数组 + 链表或红黑树`，数组的每个头节点作为锁，如果多个线程访问的头节点不同，则不会冲突。首次生成头节点时如果发生竞争，利用 cas 而非 syncronized，进一步提升性能
+* 并发度：Node 数组有多大，并发度就有多大，与 1.7 不同，Node 数组可以扩容
+* 扩容条件：Node 数组满 3/4 时就会扩容
+* 扩容单位：以链表为单位从后向前迁移链表，迁移完成的将旧数组头节点替换为 ForwardingNode
+* 扩容时并发 get
+  * 根据是否为 ForwardingNode 来决定是在新数组查找还是在旧数组查找，不会阻塞
+  * 如果链表长度超过 1，则需要对节点进行复制（创建新节点），怕的是节点迁移后 next 指针改变
+  * 如果链表最后几个元素扩容后索引不变，则节点无需复制
+* 扩容时并发 put
+  * 如果 put 的线程与扩容线程操作的链表是同一个，put 线程会阻塞
+  * 如果 put 的线程操作的链表还未迁移完成，即头节点不是 ForwardingNode，则可以并发执行
+  * 如果 put 的线程操作的链表已经迁移完成，即头结点是 ForwardingNode，则可以协助扩容
+* 与 1.7 相比是懒惰初始化(1.7饿汉式，1.8懒汉式)
+* capacity 代表预估的元素个数，capacity / factory 来计算出初始数组大小，需要贴近 $2^n$ 
+  * capacity和factor只有在第一次初始化map时起作用，之后factor仍按照0.75进行扩容
+* loadFactor 只在计算初始数组大小时被使用，之后扩容固定为 3/4
+* 超过树化阈值时的扩容问题，如果容量已经是 64，直接树化，否则在原来容量基础上做 3 轮扩容
 
 [ConcurrentHashMap底层结构和原理详解](https://blog.csdn.net/qq_45408390/article/details/122189726)
 
