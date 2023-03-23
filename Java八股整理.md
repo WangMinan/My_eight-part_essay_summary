@@ -60,6 +60,8 @@ JVM的处理方式为：
 
 由于拼接过程中的**GC**，导致直接使用String进行字符串拼接的效率比较低。
 
+
+
 ### StringBuffer线程安全的原因
 
 StringBuffer中很多方法可以带有`synchronized`关键字，所以可以保证线程是安全的
@@ -372,7 +374,7 @@ ThreadLocalMap 中的 key 被设计为弱引用，原因如下
 * 懒惰被动释放 value
   * get key 时，发现是 null key，则释放其 value 内存
   * set key 时，会使用启发式扫描，清除临近的 null key 的 value 内存，启发次数与元素个数，是否发现 null key 有关
-* 主动 remove 释放 key，value
+* 主动 remove 释放 key，value——一般建议手动Remove
   * 会同时释放 key，value 的内存，也会清除临近的 null key 的 value 内存
   * 推荐使用它，因为一般使用 ThreadLocal 时都把它作为静态变量（即强引用），因此无法被动依靠 GC 回收
 
@@ -568,6 +570,8 @@ $$
   + 右移16位的原因
 
     根据哈希码计算下标Index的过程，大家也发现了。实际上，只有数组长度以内的低位才会参与运算。例如数组长度是16，那么只有低4位会参与计算；如果数组长度是256，那么只有低8位会参与计算；**如果数组长度是65536，那么只有低16位会参与计算**。HashMap取16位是一个折中的数字，绝大部分情况下，HashMap数组的长度都不会超过65536。
+
+
 
 ### HashMap的扩容机制
 

@@ -4,69 +4,55 @@
     <meta charset="UTF-8">
     <title>王旻安的八股文整理</title>
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+    <!-- 网站描述+关键字+作者 -->
     <meta name="description" content="Java, MySQL与一些框架的面试八股文综合整理">
+    <meta name="keywords" content="Java,八股文,面试,docsify">
+    <meta name="author" content="WangMinan">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
     <!-- Theme: Simple -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple.css">
-
-    <!-- <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css"> -->
-    <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.css" />
+    <link rel="stylesheet" href="https://fastly.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple.css">
+    <!-- icon -->
     <link rel="shortcut icon" href="_media/favicon.ico">
   </head>
   <body>
 
     <!-- edit on github -->
     <script src="//unpkg.com/docsify-edit-on-github/index.js"></script>
-
-    <!-- docsify的js依赖 -->
-    <script src="//cdn.jsdelivr.net/npm/docsify/lib/docsify.min.js"></script>
-    <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/emoji.min.js"></script>
     
     <!--在所有的代码块上添加一个简单的Click to copy按钮来允许用户从你的文档中轻易地复制代码-->
-    <script src="//cdn.jsdelivr.net/npm/docsify-copy-code/dist/docsify-copy-code.min.js"></script>
-    <!-- Docsify v4 -->
-    <script src="//cdn.jsdelivr.net/npm/docsify@4"></script>
+    <script src="//fastly.jsdelivr.net/npm/docsify-copy-code/dist/docsify-copy-code.min.js"></script>
 
-    <!-- 代码高亮 -->
-    <!-- Markdown 引用样式美化 -->
-    <script src="https://unpkg.com/docsify-plugin-flexible-alerts"></script>
-  
-    <!-- <script src="https://prismjs.com/prism.js"></script> -->
-    <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
-    <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-java.min.js"></script>
-    <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-python.min.js"></script>
-    <!-- <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-cpp.min.js"></script>
-    <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-c.min.js"></script> -->
-    <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-javascript.min.js"></script>
-    <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-css.min.js"></script>
-    <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-powershell.min.js"></script>
-    <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-sql.min.js"></script>
-    <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
-    <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-properties.min.js"></script>
+    <!-- 侧边栏折叠 -->
+    <script src="//fastly.jsdelivr.net/npm/docsify-sidebar-collapse/dist/docsify-sidebar-collapse.min.js"></script>
 
-    <!-- latex -->
-    <script src="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.js"></script>
-    <script src="//cdn.jsdelivr.net/npm/docsify-latex@0"></script>
+    <!-- mermaid -->
+    <script src="//fastly.jsdelivr.net/npm/mermaid@8.0.0-rc.8/dist/mermaid.min.js"></script>
 
-    <div id="app">🏃‍🏃‍🏃‍💨加载中...</div>
+    <div style="margin:auto; width: 300px; height: 50px;" id="app">🏃‍🏃‍🏃‍💨稍等一下,很快就好啦！...</div>
 
     <script>
+      mermaid.initialize({
+        startOnLoad: false,
+      });
+      let id = 0;
+
       window.$docsify = {
         themeColor: '#409EFF',
-        name: '<span>Docsify-<strong>我的八股文整理</strong></span>',
+        name: '<span>Docsify<br/><strong>我的八股文整理</strong></span>',
         repo: 'https://github.com/WangMinan/My_eight-part_essay_summary',
         loadSidebar: true,
         subMaxLevel: 5,
         auto2top: true,
+        search : 'auto',
         plugins:[
           EditOnGithubPlugin.create(
             'https://github.com/WangMinan/my_eight-part_essay_summary/blob/main/',
             null,
             function(file) {
                 if (file.indexOf('en') === -1) {
-                  return '✏️在Github上编辑'
+                  return '✏️在GitHub上编辑'
                 } else {
-                  return 'edit on git'
+                  return '✏️edit on GitHub'
                 }
             }
           )
@@ -76,15 +62,84 @@
           fontsize:'0.9em',
           color:'rgb(90,90,90)',
           language:'chinese'
-        }
+        },
+        share: {
+            linkedin: {
+              url: "https://wangminan.me/my_eight-part_essay_summary/"
+            },
+            facebook: {
+              url: "https://wangminan.me/my_eight-part_essay_summary/"
+            },
+            twitter: {
+              url: "https://wangminan.me/my_eight-part_essay_summary/",
+              title: "王旻安的八股文整理"
+            },
+            whatsapp: {
+              url: "https://wangminan.me/my_eight-part_essay_summary/",
+              title: "王旻安的八股文整理"
+            },
+            telegram: {
+              url: "https://wangminan.me/my_eight-part_essay_summary/",
+              title: "王旻安的八股文整理"
+            },
+            theme: 'slide-bar',
+            color: '#409EFF'
+        },
+        markdown: {
+          renderer: {
+            code: function (code, lang) {
+              if (lang === 'mermaid') {
+                return (
+                  '<div class="mermaid">' +
+                  mermaid.render('mermaid-svg-' + id++, code) +
+                  '</div>'
+                );
+              }
+              return this.origin.code.apply(this, arguments);
+            },
+          },
+        },
       }
     </script>
 
+    <!-- docsify的js依赖 -->
+    <script src="//fastly.jsdelivr.net/npm/docsify/lib/docsify.min.js"></script>
+    <script src="//fastly.jsdelivr.net/npm/docsify/lib/plugins/emoji.min.js"></script>
+    <!-- 搜索 -->
+    <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
+
     <!-- 字数统计 -->
     <script src="//unpkg.com/docsify-count/dist/countable.js"></script>
-    <!-- 侧边栏折叠 -->
-    <script src="//cdn.jsdelivr.net/npm/docsify-sidebar-collapse/dist/docsify-sidebar-collapse.min.js"></script>
+    <!-- share -->
+    <script src="//unpkg.com/docsify-share/build/index.min.js"></script>
 
+    <!-- latex -->
+    <script src="//fastly.jsdelivr.net/npm/katex@latest/dist/katex.min.js"></script>
+    <link rel="stylesheet" href="//fastly.jsdelivr.net/npm/katex@latest/dist/katex.min.css" />
+    <script src="//fastly.jsdelivr.net/npm/marked@4"></script>
+
+    <!-- CDN files for docsify-katex -->
+    <script src="//fastly.jsdelivr.net/npm/docsify-katex@latest/dist/docsify-katex.js"></script>
+
+    <!-- 代码高亮 -->
+    <!-- Markdown 引用样式美化 -->
+    <script src="https://unpkg.com/docsify-plugin-flexible-alerts"></script>
+  
+    <!-- <script src="https://prismjs.com/prism.js"></script> -->
+    <script src="//fastly.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+    <script src="//fastly.jsdelivr.net/npm/prismjs@1/components/prism-http.min.js"></script>
+    <script src="//fastly.jsdelivr.net/npm/prismjs@1/components/prism-java.min.js"></script>
+    <script src="//fastly.jsdelivr.net/npm/prismjs@1/components/prism-python.min.js"></script>
+    <script src="//fastly.jsdelivr.net/npm/prismjs@1/components/prism-cpp.min.js"></script>
+    <script src="//fastly.jsdelivr.net/npm/prismjs@1/components/prism-c.min.js"></script>
+    <script src="//fastly.jsdelivr.net/npm/prismjs@1/components/prism-javascript.min.js"></script>
+    <script src="//fastly.jsdelivr.net/npm/prismjs@1/components/prism-css.min.js"></script>
+    <script src="//fastly.jsdelivr.net/npm/prismjs@1/components/prism-powershell.min.js"></script>
+    <script src="//fastly.jsdelivr.net/npm/prismjs@1/components/prism-sql.min.js"></script>
+    <script src="//fastly.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
+    <script src="//fastly.jsdelivr.net/npm/prismjs@1/components/prism-properties.min.js"></script>
+
+    <!-- 评论区 -->
     <script type="text/javascript">
       // 使用document.ready时dom树未加载完全
       window.onload = function(){
