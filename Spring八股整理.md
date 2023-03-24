@@ -1,8 +1,9 @@
 <div align="center">
     <h1>
-        🥬SpringBoot八股整理
+        🥬Spring八股整理
     </h1>
 </div>
+
 
 
 ## IoC(IoC与DI)
@@ -26,6 +27,8 @@
 有反转就有正转，传统应用程序是由我们自己在对象中主动控制去直接获取依赖对象，也就是正转；而反转则是由容器来帮忙创建及注入依赖对象；为何是反转？因为由容器帮我们查找及注入依赖对象，对象只是被动的接受依赖对象，所以是反转；哪些方面反转了？依赖对象的获取被反转了。
 
 ![img](https://cdn.jsdelivr.net/gh/WangMinan/Pics/1368782-20180426150619347-288835784.jpg)
+
+
 
 
 
@@ -397,6 +400,10 @@ public int loadBeanDefinitions(String... locations) throws BeanDefinitionStoreEx
 }
 ```
 
+**补充:Java的三点运算符**
+
+>  java类型后面跟三个点是代表可以接受多个实际参数，这里的多个指的是不限个数，可以是一个、两个、三个甚至更多。java中类型后面加三个点是java1.5之后出现的新的内容,使用在函数的形参上，相当于一个数组，调用函数时传递多少了实际参数，都可以存储到这个形参上，需要注意的是，使用这个形参必须放在最后一位形参位置上，否则会报错。
+
 `loadBeanDefinitions(Resource...resources)`方法和上面分析的3个方法类似，同样也是调用`XmlBeanDefinitionReader`的`loadBeanDefinitions`方法。
 
 从对`AbstractBeanDefinitionReader`的`loadBeanDefinitions`方法源码分析可以看出该方法做了以下两件事：
@@ -688,6 +695,566 @@ public void registerBeanDefinition(String beanName, BeanDefinition beanDefinitio
 
 
 
+### 补充知识：Java动态代理与CGLIB代理
+
+#### Java动态代理
+
+jdk为代理提供了两个类
+
+```java
+java.lang.reflect.Proxy
+java.lang.reflect.InvocationHandler
+```
+
+jdk自带的代理使用上面有个限制，**只能为接口创建代理类**，如果需要给具体的类创建代理类，需要用后面要说的cglib
+
+##### 一些方法
+
+这是jdk动态代理中主要的一个类，里面有一些静态方法会经常用到
+
++ getProxyClass
+
+  ```java
+  // 为指定的接口创建代理类，返回代理类的Class对象
+  public static Class<?> getProxyClass(ClassLoader loader, Class<?>... interfaces)
+  ```
+
+  loader：定义代理类的类加载器
+
+  interfaces：指定需要实现的接口列表，创建的代理默认会按顺序实现interfaces指定的接口
+
++ newProxyInstance
+
+  ```java
+  // 创建代理类的实例对象
+  public static Object newProxyInstance(ClassLoader loader, Class<?>[] interfaces, InvocationHandler h)
+  ```
+
+  这个方法先为指定的接口创建代理类，然后会生成代理类的一个实例，最后一个参数比较特殊，是InvocationHandler类型的，这个是个接口
+
+  ```java
+  public Object invoke(Object proxy, Method method, Object[] args) throws Throwable;
+  ```
+
+  上面方法会返回一个代理对象，当调用代理对象的任何方法的时候，会就被`InvocationHandler`接口的`invoke`方法处理。
+
++ isProxy
+
+  ```java
+  // 判断指定的类是否是一个代理类
+  public static boolean isProxyClass(Class<?> cl)
+  ```
+
++ getInvocationHandler
+
+  ```java
+  // 获取代理对象的InvocationHandler对象
+  public static InvocationHandler getInvocationHandler(Object proxy) throws IllegalArgumentException
+  ```
+
+##### 创建JDK代理的两种方式
+
+###### 方法1
+
+1.调用Proxy.getProxyClass方法获取代理类的Class对象
+2.使用InvocationHandler接口创建代理类的处理器
+3.通过代理类和InvocationHandler创建代理对象
+4.上面已经创建好代理对象了，接着我们就可以使用代理对象了
+
+**原始接口**
+
+```java
+public interface IService {
+    void m1();
+    void m2();
+    void m3();
+}
+```
+
+**代理对象**
+
+```java
+@Test
+public void m1() throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException {
+    // 1. 获取接口对应的代理类
+    Class<IService> proxyClass = (Class<IService>) Proxy.getProxyClass(IService.class.getClassLoader(), IService.class);
+    // 2. 创建代理类的处理器
+    InvocationHandler invocationHandler = new InvocationHandler() {
+        @Override
+        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+            System.out.println("我是InvocationHandler，被调用的方法是：" + method.getName());
+            return null;
+        }
+    };
+    // 3. 创建代理实例
+    IService proxyService = proxyClass.getConstructor(InvocationHandler.class).newInstance(invocationHandler);
+    // 4. 调用代理的方法
+    proxyService.m1();
+    proxyService.m2();
+    proxyService.m3();
+}
+```
+
+**运行输出**
+
+```
+我是InvocationHandler，被调用的方法是：m1
+我是InvocationHandler，被调用的方法是：m2
+我是InvocationHandler，被调用的方法是：m3
+```
+
+印证了
+
+> 上面方法会返回一个代理对象，当调用代理对象的任何方法的时候，会就被`InvocationHandler`接口的`invoke`方法处理。
+
+
+
+###### 方法2
+
+1.使用InvocationHandler接口创建代理类的处理器
+2.使用Proxy类的静态方法newProxyInstance直接创建代理对象
+3.使用代理对象
+
+**代理对象**
+
+```java
+@Test
+public void m2() throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException {
+    // 1. 创建代理类的处理器
+    InvocationHandler invocationHandler = new InvocationHandler() {
+        @Override
+        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+            System.out.println("我是InvocationHandler，被调用的方法是：" + method.getName());
+            return null;
+        }
+    };
+    // 2. 创建代理实例 跳过了方法1中的ProxyClass 直接使用静态方法创建
+    IService proxyService = (IService) Proxy.newProxyInstance(IService.class.getClassLoader(), new Class[]{IService.class}, invocationHandler);
+    // 3. 调用代理的方法
+    proxyService.m1();
+    proxyService.m2();
+    proxyService.m3();
+}
+```
+
+**运行输出**
+
+```
+我是InvocationHandler，被调用的方法是：m1
+我是InvocationHandler，被调用的方法是：m2
+我是InvocationHandler，被调用的方法是：m3
+```
+
+##### 使用请注意
+
+1. jdk中的Proxy只能为接口生成代理类，如果你想给某个类创建代理类，那么Proxy是无能为力的，此时需要我们用到下面要说的cglib了。
+2. Proxy类中提供的几个常用的静态方法大家需要掌握
+3. 通过Proxy创建代理对象，当调用代理对象任意方法时候，会被InvocationHandler接口中的invoke方法进行处理，这个接口内容是关键
+
+#### cglib代理
+
+jdk动态代理只能为接口创建代理，使用上有局限性。实际的场景中我们的类不一定有接口，此时如果我们**想为普通的类也实现代理功能**，我们就需要用到cglib来实现了。
+
+cglib是一个强大、高性能的字节码生成库，它用于在运行时**扩展Java类和实现接口**；本质上它是通过动态的生成一个子类去覆盖所要代理的类（非final修饰的类和方法）。Enhancer可能是CGLIB中最常用的一个类，和jdk中的Proxy不同的是，Enhancer既能够代理普通的class，也能够代理接口。Enhancer**创建一个被代理对象的子类，并且拦截所有的方法调用**（包括从Object中继承的toString和hashCode方法）。**Enhancer不能够拦截final方法**，例如Object.getClass()方法，这是由于Java final方法语义决定的。基于同样的道理，Enhancer**也不能对final类进行代理操作**。
+
+CGLIB作为一个开源项目，其代码托管在github，地址为：https://github.com/cglib/cglib
+
+##### cglib组成结构
+
+![图片](https://cdn.jsdelivr.net/gh/WangMinan/Pics/640)
+
+CGLIB底层使用了ASM（一个短小精悍的字节码操作框架）来操作字节码生成新的类。除了CGLIB库外，脚本语言（如Groovy和BeanShell）也使用ASM生成字节码。ASM使用类似SAX的解析器来实现高性能。我们不鼓励直接使用ASM，因为它需要对Java字节码的格式足够的了解。
+
+Spring已将第三方cglib jar包中所有的类集成到Spring自己的jar包中，本系列内容都是和Spring相关的，为了方便，我们直接使用spring内部已集成的来讲解。
+
+##### 5个案例
+
+###### 1. 拦截所有方法（MethodInterceptor）
+
+创建一个具体的类
+
+```java
+public class Service1 {
+    public void m1() {
+        System.out.println("我是m1方法");
+    }
+
+    public void m2() {
+        System.out.println("我是m2方法");
+    }
+}
+```
+
+为其创建代理并打印日志
+
+```java
+public class CglibTest {
+
+    @Test
+    public void test1() {
+        //使用Enhancer来给某个类创建代理类，步骤
+        //1.创建Enhancer对象
+        Enhancer enhancer = new Enhancer();
+        //2.通过setSuperclass来设置父类型，即需要给哪个类创建代理类
+        enhancer.setSuperclass(Service1.class);
+        /*3.设置回调，需实现org.springframework.cglib.proxy.Callback接口，
+        此处我们使用的是org.springframework.cglib.proxy.MethodInterceptor，也是一个接口，实现了Callback接口，
+        当调用代理对象的任何方法的时候，都会被MethodInterceptor接口的invoke方法处理*/
+        enhancer.setCallback(new MethodInterceptor() {
+            /**
+             * 代理对象方法拦截器
+             * @param o 代理对象
+             * @param method 被代理的类的方法，即Service1中的方法
+             * @param objects 调用方法传递的参数
+             * @param methodProxy 方法代理对象
+             * @return
+             * @throws Throwable
+             */
+            @Override
+            public Object intercept(Object o, Method method, Object[] objects, MethodProxy methodProxy) 					throws Throwable {
+                System.out.println("调用方法:" + method);
+                //可以调用MethodProxy的invokeSuper调用被代理类的方法
+                Object result = methodProxy.invokeSuper(o, objects);
+                return result;
+            }
+        });
+        //4.获取代理对象,调用enhancer.create方法获取代理对象，这个方法返回的是Object类型的，所以需要强转一下
+        Service1 proxy = (Service1) enhancer.create();
+        //5.调用代理对象的方法
+        proxy.m1();
+        proxy.m2();
+    }
+}
+```
+
+上面代码中的注释很详细，列出了给指定的类创建代理的具体步骤，整个过程中主要用到了Enhancer类和`MethodInterceptor`接口。
+
+`enhancer.setSuperclass`用来设置代理类的父类，即需要给哪个类创建代理类，此处是Service1
+
+`enhancer.setCallback`传递的是`MethodInterceptor`接口类型的参数，`MethodInterceptor`接口有个`intercept`方法，这个方法会拦截代理对象所有的方法调用。
+
+还有一个重点是`Object result = methodProxy.invokeSuper(o, objects);`可以调用被代理类，也就是Service1类中的具体的方法，从方法名称的意思可以看出是调用父类，实际对某个类创建代理，cglib底层通过修改字节码的方式为Service1类创建了一个子类。
+
+运行输出
+
+```
+调用方法:public void com.javacode2018.lesson001.demo17.Service1.m1()
+我是m1方法
+调用方法:public void com.javacode2018.lesson001.demo17.Service1.m2()
+我是m2方法
+```
+
+
+
+###### 2. 拦截所有方法(MethodInterceptor)
+
+使用一个与上一题类似的类
+
+```java
+public class Service2 {
+    public void m1() {
+        System.out.println("我是m1方法");
+        this.m2(); //@1 方法m1调用了m2
+    }
+
+    public void m2() {
+        System.out.println("我是m2方法");
+    }
+}
+```
+
+为其创建代理
+
+```java
+@Test
+public void test2() {
+    Enhancer enhancer = new Enhancer();
+    enhancer.setSuperclass(Service2.class);
+    enhancer.setCallback(new MethodInterceptor() {
+        @Override
+        public Object intercept(Object o, Method method, Object[] objects, MethodProxy methodProxy) throws Throwable {
+            System.out.println("调用方法:" + method);
+            Object result = methodProxy.invokeSuper(o, objects);
+            return result;
+        }
+    });
+    Service2 proxy = (Service2) enhancer.create();
+    proxy.m1(); //@1
+}
+```
+
+只调用了m1方法，但输出结果包含了m1和m2的执行
+
+```
+调用方法:public void com.javacode2018.lesson001.demo17.Service2.m1()
+我是m1方法
+调用方法:public void com.javacode2018.lesson001.demo17.Service2.m2()
+我是m2方法
+```
+
+从输出中可以看出m1和m2方法都被拦截器处理了，而m2方法是在Service1的m1方法中调用的，也被拦截处理了。
+
+
+
+###### 3. 拦截所有方法并返回固定值(FixedValue)
+
+当调用某个类的任何方法的时候，都希望返回一个固定的值，此时可以使用`FixedValue`接口，如下：
+
+```java
+enhancer.setCallback(new FixedValue() {
+    @Override
+    public Object loadObject() throws Exception {
+        return "路人甲";
+    }
+});
+```
+
+上面创建的代理对象，调用其任意方法返回的都是"路人甲"。
+
+还是使用之前的service进行代理操作
+
+```java
+public class Service3 {
+    public String m1() {
+        System.out.println("我是m1方法");
+        return "hello:m1";
+    }
+
+    public String m2() {
+        System.out.println("我是m2方法");
+        return "hello:m2";
+    }
+}
+```
+
+对其添加代理的代码如下
+
+```java
+@Test
+public void test3() {
+    Enhancer enhancer = new Enhancer();
+    enhancer.setSuperclass(Service3.class);
+    enhancer.setCallback(new FixedValue() {
+        @Override
+        public Object loadObject() throws Exception {
+            return "路人甲";
+        }
+    });
+    Service3 proxy = (Service3) enhancer.create();
+    System.out.println(proxy.m1());//@1
+    System.out.println(proxy.m2()); //@2
+    System.out.println(proxy.toString());//@3
+}
+```
+
+得到的结果如下
+
+```
+路人甲
+路人甲
+路人甲
+```
+
+输出部分均被拦截
+
+
+
+###### 4. 直接放行，不做任何操作(NoOp.INSTANCE)
+
+对Service3进行操作
+
+```java
+@Test
+public void test6() {
+    Enhancer enhancer = new Enhancer();
+    enhancer.setSuperclass(Service3.class);
+    enhancer.setCallback(NoOp.INSTANCE);
+    Service3 proxy = (Service3) enhancer.create();
+    System.out.println(proxy.m1());
+    System.out.println(proxy.m2());
+}
+```
+
+`Callback`接口下面有个子接口`org.springframework.cglib.proxy.NoOp`，将这个作为Callback的时候，被调用的方法会直接放行，像没有任何代理一样。
+
+运行输出
+
+```
+我是m1方法
+hello:m1
+我是m2方法
+hello:m2
+```
+
+
+
+###### 5. 不同的方法使用不同的拦截器(CallbackFilter)
+
+创建一个新的Service
+
+```java
+public class Service4 {
+    public void insert1() {
+        System.out.println("我是insert1");
+    }
+
+    public void insert2() {
+        System.out.println("我是insert2");
+    }
+
+    public String get1() {
+        System.out.println("我是get1");
+        return "get1";
+    }
+
+    public String get2() {
+        System.out.println("我是get2");
+        return "get2";
+    }
+}
+```
+
+**需求，给这个类创建一个代理需要实现下面的功能：**
+
+1. 以insert开头的方法需要统计方法耗时
+2. 以get开头的的方法直接返回固定字符串欢迎和【路人甲java】一起学spring！
+
+下来看代码，然后再解释：
+
+```java
+@Test
+public void test4() {
+    Enhancer enhancer = new Enhancer();
+    enhancer.setSuperclass(Service4.class);
+    //创建2个Callback
+    Callback[] callbacks = {
+            //这个用来拦截所有insert开头的方法
+            new MethodInterceptor() {
+                @Override
+                public Object intercept(Object o, Method method, Object[] objects, MethodProxy methodProxy) 					throws Throwable {
+                    long starTime = System.nanoTime();
+                    Object result = methodProxy.invokeSuper(o, objects);
+                    long endTime = System.nanoTime();
+                    System.out.println(method + "，耗时(纳秒):" + (endTime - starTime));
+                    return result;
+                }
+            },
+            //下面这个用来拦截所有get开头的方法，返回固定值的
+            new FixedValue() {
+                @Override
+                public Object loadObject() throws Exception {
+                    return "路人甲Java";
+                }
+            }
+    };
+    enhancer.setCallbackFilter(new CallbackFilter() {
+        @Override
+        public int accept(Method method) {
+            return 0;
+        }
+    });
+    //调用enhancer的setCallbacks传递Callback数组
+    enhancer.setCallbacks(callbacks);
+    /**
+     * 设置过滤器CallbackFilter
+     * CallbackFilter用来判断调用方法的时候使用callbacks数组中的哪个Callback来处理当前方法
+     * 返回的是callbacks数组的下标
+     */
+    enhancer.setCallbackFilter(new CallbackFilter() {
+        @Override
+        public int accept(Method method) {
+            //获取当前调用的方法的名称
+            String methodName = method.getName();
+            /*
+             * 方法名称以insert开头，
+             * 返回callbacks中的第1个Callback对象来处理当前方法，
+             * 否则使用第二个Callback处理被调用的方法
+             */
+            return methodName.startsWith("insert") ? 0 : 1;
+        }
+    });
+    Service4 proxy = (Service4) enhancer.create();
+    System.out.println("---------------");
+    proxy.insert1();
+    System.out.println("---------------");
+    proxy.insert2();
+    System.out.println("---------------");
+    System.out.println(proxy.get1());
+    System.out.println("---------------");
+    System.out.println(proxy.get2());
+}
+```
+
+输出情况
+
+```
+---------------
+我是insert1
+public void com.javacode2018.lesson001.demo17.Service4.insert1()，耗时(纳秒):15396100
+---------------
+我是insert2
+public void com.javacode2018.lesson001.demo17.Service4.insert2()，耗时(纳秒):66200
+---------------
+路人甲Java
+---------------
+路人甲Java
+```
+
+由于需求中要对不同的方法做不同的处理，所以需要有2个Callback对象，当调用代理对象的方法的时候，具体会走哪个Callback呢，此时会通过`CallbackFilter`中的`accept`来判断，这个方法返回`callbacks数组的索引`。
+
+可以对拦截方法进行优化，代码如下
+
+```java
+@Test
+public void test5() {
+    Enhancer enhancer = new Enhancer();
+    //创建2个Callback
+    //这个用来拦截所有insert开头的方法
+    Callback costTimeCallback = (MethodInterceptor) (Object o, Method method, Object[] objects, MethodProxy methodProxy) -> {
+        long starTime = System.nanoTime();
+        Object result = methodProxy.invokeSuper(o, objects);
+        long endTime = System.nanoTime();
+        System.out.println(method + "，耗时(纳秒):" + (endTime - starTime));
+        return result;
+    };
+    //下面这个用来拦截所有get开头的方法，返回固定值的
+    Callback fixdValueCallback = (FixedValue) () -> "路人甲Java";
+    CallbackHelper callbackHelper = new CallbackHelper(Service4.class, null) {
+        @Override
+        protected Object getCallback(Method method) {
+            // 判断由哪一个Callback进行拦截
+            return method.getName().startsWith("insert") ? costTimeCallback : fixdValueCallback;
+        }
+    };
+    enhancer.setSuperclass(Service4.class);
+    //调用enhancer的setCallbacks传递Callback数组
+    enhancer.setCallbacks(callbackHelper.getCallbacks());
+    /*
+     * 设置CallbackFilter,用来判断某个方法具体走哪个Callback
+     */
+    enhancer.setCallbackFilter(callbackHelper);
+    Service4 proxy = (Service4) enhancer.create();
+    System.out.println("---------------");
+    proxy.insert1();
+    System.out.println("---------------");
+    proxy.insert2();
+    System.out.println("---------------");
+    System.out.println(proxy.get1());
+    System.out.println("---------------");
+    System.out.println(proxy.get2());
+}
+```
+
+
+
+#### Java动态代理和CGLIB的区别
+
++ Java动态代理只能够对接口进行代理，不能对普通的类进行代理（因为所有生成的代理类的父类为Proxy，Java类继承机制不允许多重继承）；CGLIB能够代理普通类；
+
++ Java动态代理使用Java原生的反射API进行操作，在生成类上比较高效；CGLIB使用ASM框架直接对字节码进行操作，在类的执行过程中比较高效
+
+
+
 ### IoC容器的依赖注入(DI)
 
 DI——Dependency Injection，即**依赖注入**。
@@ -788,6 +1355,8 @@ Spring IoC容器还有一些高级特性，如使用`lazy-init`属性对Bean预�
 
 在refresh方法中`ConfigurableListableBeanFactorybeanFactory = obtainFreshBeanFactory();`启动了Bean定义资源的载入、注册过程，而`finishBeanFactoryInitialization`方法是对注册后的Bean定义中的预实例化(lazy-init=false，Spring默认就是预实例化，即为true)的Bean进行处理的地方。
 
+
+
 ##### 2. finishBeanFactoryInitialization处理预实例化Bean
 
 当Bean定义资源被载入IoC容器之后，容器将Bean定义资源解析为容器内部的数据结构BeanDefinition注册到容器中，`AbstractApplicationContext类中的finishBeanFactoryInitialization`方法对配置了预实例化属性的Bean进行预初始化过程
@@ -813,9 +1382,13 @@ protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory b
 
 `ConfigurableListableBeanFactory`是一个接口，其`preInstantiateSingletons`方法由其子类`DefaultListableBeanFactory`提供。
 
+
+
 ##### 3. DefaultListableBeanFactory对配置lazy-init属性单态Bean的预实例化
 
 通过对lazy-init处理源码的分析，我们可以看出，如果设置了lazy-init属性，则容器在完成Bean定义的注册之后，**会通过getBean方法，触发对指定Bean的初始化和依赖注入过程**，这样当应用第一次向容器索取所需的Bean时，容器不再需要对Bean进行初始化和依赖注入，直接从已经完成实例化和依赖注入的Bean中取一个线程的Bean，这样就提高了第一次获取Bean的性能。
+
+
 
 #### FactoryBean的实现
 
@@ -833,6 +1406,8 @@ String FACTORY_BEAN_PREFIX = "&";
 
 如果`myJndiObject`是一个`FactoryBean`，则使用`&myJndiObject`得到的是myJndiObject**对象**，而**不是**myJndiObject**产生出来的对象**。
 
+
+
 ##### 1. FactoryBean的源码如下
 
 ```java
@@ -848,6 +1423,8 @@ public interface FactoryBean<T> {
 }
 ```
 
+
+
 ##### 2. AbstractBeanFactory的getBean方法调用FactoryBean
 
 在前面我们分析Spring Ioc容器实例化Bean并进行依赖注入过程的源码时，提到在getBean方法触发容器实例化Bean的时候会调用`AbstractBeanFactory`的doGetBean方法来进行实例化的过程.
@@ -856,9 +1433,13 @@ public interface FactoryBean<T> {
 
 Dereference(解引用)：一个在C/C++中应用比较多的术语，在C++中，”*”是解引用符号，而”&”是引用符号，解引用是指变量指向的是所引用对象的本身数据，而不是引用对象的内存地址。
 
+
+
 ##### 3. AbstractBeanFactory生产Bean实例对象
 
 BeanFactory接口调用其实现类的getObject方法来实现创建Bean实例对象的功能
+
+
 
 ##### 4. 工厂Bean的实现类getObject方法创建Bean实例对象
 
@@ -895,6 +1476,8 @@ Spring IoC容器提供了两种管理Bean依赖关系的方式：
 
 通过对autowiring自动装配特性的理解，我们知道容器对Bean的自动装配发生在容器对Bean依赖注入的过程中。在前面对Spring IoC容器的依赖注入过程源码分析中，我们已经知道了容器对Bean实例对象的属性注入的处理发生在`AbstractAutoWireCapableBeanFactory`类中的`populateBean`方法中.
 
+
+
 ##### 1. AbstractAutoWireCapableBeanFactory对Bean实例进行属性依赖注入
 
 应用第一次通过getBean方法(配置了lazy-init预实例化属性的除外)向IoC容器索取Bean时，容器创建Bean实例对象，并且对Bean实例对象进行属性依赖注入，AbstractAutoWireCapableBeanFactory的populateBean方法就是实现Bean属性依赖注入的功能
@@ -923,6 +1506,8 @@ protected void populateBean(String beanName, AbstractBeanDefinition mbd, BeanWra
 ```
 
 可以从上面的代码中看出主要通过**名称(处理时若未指定Bean名称则默认按照类名首字母小写)和类型**进行自动装配，具体细节如下
+
+
 
 ##### 2. Spring IoC容器根据Bean名称或者类型进行autowiring自动依赖注入：
 
@@ -1007,6 +1592,8 @@ protected void autowireByType(
 
 通过上面的源码分析，我们可以看出来通过属性名进行自动依赖注入的相对比通过属性类型进行自动依赖注入要稍微简单一些，但是真正实现属性注入的是`DefaultSingletonBeanRegistry`类的`registerDependentBean`方法。
 
+
+
 ##### 3. DefaultSingletonBeanRegistry的registerDependentBean方法对属性注入
 
 ```java
@@ -1050,6 +1637,1001 @@ public void registerDependentBean(String beanName, String dependentBeanName) {
 + 将依赖Bean的名称和被依赖Bean的名称存储在IoC容器的集合中。
 
 Spring IoC容器的autowiring属性自动依赖注入是一个很方便的特性，可以简化开发时的配置，但是凡是都有两面性，自动属性依赖注入也有不足，首先，Bean的依赖关系在配置文件中无法很清楚地看出来，对于维护造成一定困难。其次，由于自动依赖注入是Spring容器自动执行的，容器是不会智能判断的，如果配置不当，将会带来无法预料的后果，所以自动依赖注入特性在使用时还是综合考虑。
+
+
+
+## AOP
+
+AOP（Aspect Oriented Programming面向切面编程）
+
+参考了[面试今日头条，被虐的不行了。。。 (qq.com)](https://mp.weixin.qq.com/s?__biz=MzA5MTkxMDQ4MQ==&mid=2648934876&idx=1&sn=7794b50e658e0ec3e0aff6cf5ed4aa2e&chksm=886211e2bf1598f4e0e636170a4b36a5a5edd8811c8b7c30d61135cb114b0ce506a6fa84df0b&token=1672930952&lang=zh_CN&scene=21#wechat_redirect)
+
+更详细的源码解释可以看同一个博主的[AOP 核心源码、原理详解 - china_coding - 博客园 (cnblogs.com)](https://www.cnblogs.com/konglxblog/p/15409195.html)
+
+### 一些概念
+
++ **目标对象(target)**
+
+  目标对象指将要被增强的对象，即包含主业务逻辑的类对象。
+
++ **连接点(JoinPoint)**
+
+  程序执行过程中明确的点，如方法的调用或特定的异常被抛出。
+
+  连接点由两个信息确定：
+
+  + 方法(表示程序执行点，即在哪个目标方法)
+  + 相对点(表示方位，即目标方法的什么位置，比如调用前，后等)
+
+  简单来说，连接点就是被拦截到的程序执行点，因为Spring只支持方法类型的连接点，所以在Spring中连接点就是被拦截到的方法。
+
++ **代理对象(Proxy)**
+
+  AOP中会通过代理的方式，对目标对象生成一个代理对象，代理对象中会加入需要增强功能，通过代理对象来间接的方式目标对象，起到增强目标对象的效果。
+
++ **通知(Advice)**
+
+  需要在目标对象中增强的功能，如上面说的：业务方法前验证用户的功能、方法执行之后打印方法的执行日志。
+
+  通知中有2个重要的信息：**方法的什么地方**，**执行什么操作**，这2个信息通过通知来指定。
+
+  方法的什么地方？之前、之后、包裹目标方法、方法抛出异常后等。
+
++ **切入点(Pointcut)**
+
+  用来指定需要将通知使用到哪些地方，比如需要用在哪些类的哪些方法上，切入点就是做这个配置的。
+
++ **切面（Aspect）**
+
+  通知（Advice）和切入点（Pointcut）的组合。切面来定义在哪些地方（Pointcut）执行什么操作（Advice）。
+
++ **顾问（Advisor)**
+
+  Advisor 也是通知（Advice）和切入点（Pointcut）的组合。，Advice 是要增强的逻辑，而增强的逻辑要在什么地方执行是通过Pointcut来指定的，所以 Advice 必需与 Pointcut 组合在一起，这就诞生了 Advisor 这个类，spring Aop中提供了一个Advisor接口将Pointcut 与 Advice 的组合起来。
+
+  Advisor有好几个称呼：顾问、通知器。
+
+其中这4个：连接点(JoinPoint)、通知(advise)、切入点(pointcut)、顾问（advisor)，在spring中都定义了接口和类来表示这些对象，下面我们一个个来看一下。
+
+#### JoinPoint
+
+```java
+package org.aopalliance.intercept;
+
+public interface Joinpoint {
+
+    /**
+     * 转到拦截器链中的下一个拦截器
+     */
+    Object proceed() throws Throwable;
+
+    /**
+     * 返回保存当前连接点静态部分【的对象】，这里一般指被代理的目标对象
+     */
+    Object getThis();
+
+    /**
+     * 返回此静态连接点  一般就为当前的Method(至少目前的唯一实现是MethodInvocation,所以连接点得静态部分肯定就是本方法)
+     */
+    AccessibleObject getStaticPart();
+
+}
+```
+
+几个重要的子接口和实现类如下图所示
+
+![640](https://cdn.jsdelivr.net/gh/WangMinan/Pics/640.png)
+
+##### Invocation接口
+
+```java
+package org.aopalliance.intercept;
+
+/**
+ * 此接口表示程序中的调用
+ * 调用是一个连接点，可以被拦截器拦截。
+ */
+public interface Invocation extends Joinpoint {
+
+    /**
+     * 将参数作为数组对象获取。可以更改此数组中的元素值以更改参数。
+     * 通常用来获取调用目标方法的参数
+     */
+    Object[] getArguments();
+}
+```
+
+##### MethodInvocation接口
+
+```java
+package org.aopalliance.intercept;
+
+import java.lang.reflect.Method;
+
+/**
+ * 方法调用的描述，在方法调用时提供给拦截器。
+ * 方法调用是一个连接点，可以被方法拦截器拦截。
+ */
+public interface MethodInvocation extends Invocation {
+
+    /**
+     * 返回正在被调用得方法~~~  返回的是当前Method对象。
+     * 此时，效果同父类的AccessibleObject getStaticPart() 这个方法
+     */
+    Method getMethod();
+}
+```
+
+##### ProxyMethodInvocation接口
+
+表示代理方法的调用
+
+```csharp
+public interface ProxyMethodInvocation extends MethodInvocation {
+
+    /**
+     * 获取被调用的代理对象
+     */
+    Object getProxy();
+
+    /**
+     * 克隆一个方法调用器MethodInvocation
+     */
+    MethodInvocation invocableClone();
+
+    /**
+     * 克隆一个方法调用器MethodInvocation，并为方法调用器指定参数
+     */
+    MethodInvocation invocableClone(Object... arguments);
+
+    /**
+     * 设置要用于此链中任何通知的后续调用的参数。
+     */
+    void setArguments(Object... arguments);
+
+    /**
+     * 添加一些扩展用户属性，这些属性不在AOP框架内使用。它们只是作为调用对象的一部分保留，用于特殊的拦截器。
+     */
+    void setUserAttribute(String key, @Nullable Object value);
+
+    /**
+     * 根据key获取对应的用户属性
+     */
+    @Nullable
+    Object getUserAttribute(String key);
+
+}
+```
+
+通俗点理解：连接点表示方法的调用过程，内部包含了方法调用过程中的所有信息，比如被调用的方法、目标、代理对象、执行拦截器链等信息。
+
+上面定义都是一些接口，最终有2个实现。
+
++ ReflectiveMethodInvocation
+
+  当代理对象是采用jdk动态代理创建的，通过代理对象来访问目标对象的方法的时，最终过程是由ReflectiveMethodInvocation来处理的，内部会通过递归调用方法拦截器，最终会调用到目标方法。
+
++ CglibMethodInvocation
+
+  功能和上面的类似，当代理对象是采用cglib创建的，通过代理对象来访问目标对象的方法的时，最终过程是由CglibMethodInvocation来处理的，内部会通过递归调用方法拦截器，最终会调用到目标方法。
+
+
+
+#### Advice
+
+顶层advice接口中没有定义任何方法
+
+```java
+package org.aopalliance.aop;
+
+public interface Advice {
+}
+```
+
+存在4个子接口
+
+![img](https://cdn.jsdelivr.net/gh/WangMinan/Pics/1369022-20211014234038616-143351400.png)
+
+
+
+##### MethodBeforeAdvice接口
+
+方法执行前通知，需要在目标方法执行前执行一些逻辑的，可以通过这个实现。
+
+通俗点说：**需要在目标方法执行之前增强一些逻辑，可以通过这个接口来实现。before方法：在调用给定方法之前回调**。
+
+```java
+package org.springframework.aop;
+
+public interface MethodBeforeAdvice extends BeforeAdvice {
+
+    /**
+     * 调用目标方法之前会先调用这个before方法
+     * method：需要执行的目标方法
+     * args：目标方法的参数
+     * target：目标对象
+     */
+    void before(Method method, Object[] args, @Nullable Object target) throws Throwable;
+}
+```
+
+如同
+
+```java
+public Object invoke(){
+    调用MethodBeforeAdvice#before方法
+    return 调用目标方法;
+}
+```
+
+
+
+##### AfterReturningAdvice接口
+
+方法执行后通知，需要在目标方法执行之后执行增强一些逻辑的，可以通过这个实现。
+
+**不过需要注意一点：目标方法正常执行后，才会回调这个接口，当目标方法有异常，那么这通知会被跳过。**
+
+```java
+package org.springframework.aop;
+
+public interface AfterReturningAdvice extends AfterAdvice {
+
+    /**
+     * 目标方法执行之后会回调这个方法
+     * method：需要执行的目标方法
+     * args：目标方法的参数
+     * target：目标对象
+     */
+    void afterReturning(@Nullable Object returnValue, Method method, Object[] args, @Nullable Object target) throws Throwable;
+}
+```
+
+如同
+
+```java
+public Object invoke(){
+    Object retVal = 调用目标方法;
+    调用AfterReturningAdvice#afterReturning方法
+    return retVal;
+}
+```
+
+
+
+##### ThrowsAdvice接口
+
+```java
+package org.springframework.aop;
+
+public interface ThrowsAdvice extends AfterAdvice {
+}
+```
+
+此接口上没有任何方法，因为方法由反射调用，实现类必须实现以下形式的方法，前3个参数是可选的，最后一个参数为需要匹配的异常的类型。
+
+```java
+void afterThrowing([Method, args, target], ThrowableSubclass);
+```
+
+有效方法的一些例子如下：
+
+```java
+public void afterThrowing(Exception ex)
+public void afterThrowing(RemoteException)
+public void afterThrowing(Method method, Object[] args, Object target, Exception ex)
+public void afterThrowing(Method method, Object[] args, Object target, ServletException ex)
+```
+
+
+
+##### MethodInterceptor接口
+
+方法拦截器，这个接口最强大，可以实现上面3种类型的通知，上面3种通知**最终都通过适配模式将其转换为MethodInterceptor方式去执行**。
+
+```java
+package org.aopalliance.intercept;
+
+@FunctionalInterface
+public interface MethodInterceptor extends Interceptor {
+
+    /**
+     * 拦截目标方法的执行，可以在这个方法内部实现需要增强的逻辑，以及主动调用目标方法
+     */
+    Object invoke(MethodInvocation invocation) throws Throwable;
+}
+```
+
+使用方式如：
+
+```java
+public class TracingInterceptor implements MethodInterceptor {
+    Object invoke(MethodInvocation i) throws Throwable {
+        System.out.println("method "+i.getMethod()+" is called on "+ i.getThis()+" with args "+i.getArguments());
+        Object ret=i.proceed();//转到拦截器链中的下一个拦截器
+        System.out.println("method "+i.getMethod()+" returns "+ret);
+        return ret;
+    }
+}
+```
+
+
+
+##### 拦截器链
+
+一个目标方法中可以添加很多Advice，这些Advice最终都会被转换为`MethodInterceptor`类型的方法拦截器。转化的过程通过下面的通知包装器来实现。一共有三个Interceptor.
+
+最终会有多个`MethodInterceptor`，这些`MethodInterceptor`会组成一个方法调用链。
+
+Aop内部会给目标对象创建一个代理，代理对象中会放入这些`MethodInterceptor`会组成一个方法调用链，当调用代理对象的方法的时候，会按顺序执行这些方法调用链，一个个执行，最后会通过反射再去调用目标方法，进而对目标方法进行增强。
+
+![640-3](https://cdn.jsdelivr.net/gh/WangMinan/Pics/640-3.png)
+
+
+
+##### 通知包装器
+
+**负责将各种非MethodInterceptor类型的通知(Advice)包装为MethodInterceptor类型。**
+
+**刚才有说过：Aop中所有的Advice最终都会转换为MethodInterceptor类型的，组成一个方法调用链，然后执行**
+
+3个包装器类
+
+- MethodBeforeAdviceInterceptor
+- AfterReturningAdviceInterceptor
+- ThrowsAdviceInterceptor
+
+
+
+##### MethodBeforeAdviceInterceptor类
+
+这个类实现了`MethodInterceptor`接口，负责将`MethodBeforeAdvice`方法前置通知包装为`MethodInterceptor`类型，创建这个类型的对象的时候需要传递一个`MethodBeforeAdvice`类型的参数，重点是`invoke`方法
+
+```java
+package org.springframework.aop.framework.adapter;
+
+@SuppressWarnings("serial")
+public class MethodBeforeAdviceInterceptor implements MethodInterceptor, BeforeAdvice, Serializable {
+
+    private final MethodBeforeAdvice advice;
+
+    public MethodBeforeAdviceInterceptor(MethodBeforeAdvice advice) {
+        Assert.notNull(advice, "Advice must not be null");
+        this.advice = advice;
+    }
+
+
+    @Override
+    public Object invoke(MethodInvocation mi) throws Throwable {
+        //负责调用前置通知的方法
+        this.advice.before(mi.getMethod(), mi.getArguments(), mi.getThis());
+        //继续执行方法调用链
+        return mi.proceed();
+    }
+
+}
+```
+
+
+
+##### AfterReturningAdviceInterceptor类
+
+这个类实现了`MethodInterceptor`接口，负责将`AfterReturningAdvice`方法后置通知包装为`MethodInterceptor`类型，创建这个类型的对象的时候需要传递一个`AfterReturningAdvice`类型的参数，重点是`invoke`方法
+
+```java
+public class AfterReturningAdviceInterceptor implements MethodInterceptor, AfterAdvice, Serializable {
+
+    private final AfterReturningAdvice advice;
+
+    public AfterReturningAdviceInterceptor(AfterReturningAdvice advice) {
+        Assert.notNull(advice, "Advice must not be null");
+        this.advice = advice;
+    }
+
+
+    @Override
+    public Object invoke(MethodInvocation mi) throws Throwable {
+        //先执行方法调用链,可以获取目标方法的执行结果
+        Object retVal = mi.proceed();
+        //执行后置通知
+        this.advice.afterReturning(retVal, mi.getMethod(), mi.getArguments(), mi.getThis());
+        //返回结果
+        return retVal;
+    }
+
+}
+```
+
+
+
+##### ThrowsAdviceInterceptor类
+
+这个类实现了`MethodInterceptor`接口，负责将`ThrowsAdvice`异常通知包装为`MethodInterceptor`类型，创建这个类型的对象的时候需要传递一个`Object`类型的参数，通常这个参数是`ThrowsAdvice`类型的，重点是`invoke`方法
+
+```java
+package org.springframework.aop.framework.adapter;
+
+public class ThrowsAdviceInterceptor implements MethodInterceptor, AfterAdvice {
+
+    private static final String AFTER_THROWING = "afterThrowing";
+
+    private final Object throwsAdvice;
+
+    //创建ThrowsAdviceInterceptor
+    public ThrowsAdviceInterceptor(Object throwsAdvice) {
+        Assert.notNull(throwsAdvice, "Advice must not be null");
+        this.throwsAdvice = throwsAdvice;
+        //获取异常通知中定义的所有方法（public、默认的、protected、private）
+        Method[] methods = throwsAdvice.getClass().getMethods();
+        //轮询methods
+        for (Method method : methods) {
+            //方法名称为afterThrowing && 方法参数为1或者4
+            if (method.getName().equals(AFTER_THROWING) &&
+                    (method.getParameterCount() == 1 || method.getParameterCount() == 4)) {
+                //获取方法的最后一个参数类型
+                Class<?> throwableParam = method.getParameterTypes()[method.getParameterCount() - 1];
+                //判断方法参数类型是不是Throwable类型的
+                if (Throwable.class.isAssignableFrom(throwableParam)) {
+                    // 缓存异常处理方法到map中（异常类型->异常处理方法）
+                    this.exceptionHandlerMap.put(throwableParam, method);
+                }
+            }
+        }
+        //如果exceptionHandlerMap，抛出异常，所以最少要有一个异常处理方法
+        if (this.exceptionHandlerMap.isEmpty()) {
+            throw new IllegalArgumentException(
+                "At least one handler method must be found in class [" + throwsAdvice.getClass() + "]");
+        }
+    }
+
+
+    /**
+     * 获取异常通知中自定义的处理异常方法的数量
+     */
+    public int getHandlerMethodCount() {
+        return this.exceptionHandlerMap.size();
+    }
+
+
+    @Override
+    public Object invoke(MethodInvocation mi) throws Throwable {
+        try {
+            //调用通知链
+            return mi.proceed();
+        }
+        catch (Throwable ex) {
+            //获取异常通知中自定义的处理异常的方法
+            Method handlerMethod = getExceptionHandler(ex);
+            //当处理的方法不为空
+            if (handlerMethod != null) {
+                //调用异常处理方法
+                invokeHandlerMethod(mi, ex, handlerMethod);
+            }
+            //继续向外抛出异常
+            throw ex; //@1
+        }
+    }
+
+    /**
+     * 获取throwsAdvice中处理exception参数指定的异常的方法
+     */
+    @Nullable
+    private Method getExceptionHandler(Throwable exception) {
+        //获取异常类型
+        Class<?> exceptionClass = exception.getClass();
+        //从缓存中获取异常类型对应的方法
+        Method handler = this.exceptionHandlerMap.get(exceptionClass);
+        //来一个循环，查询处理方法，循环条件：方法为空 && 异常类型!=Throwable
+        while (handler == null && exceptionClass != Throwable.class) {
+            //获取异常的父类型
+            exceptionClass = exceptionClass.getSuperclass();
+            //从缓存中查找异常对应的处理方法
+            handler = this.exceptionHandlerMap.get(exceptionClass);
+        }
+        //将查找结果返回
+        return handler;
+    }
+
+    //通过反射调用异常通知中的异常方法
+    private void invokeHandlerMethod(MethodInvocation mi, Throwable ex, Method method) throws Throwable {
+        //构建方法请求参数
+        Object[] handlerArgs;
+        //若只有1个参数，参数为：异常对象
+        if (method.getParameterCount() == 1) {
+            handlerArgs = new Object[] {ex};
+        }
+        else {
+            //4个参数（方法、方法请求参数、目标对象、异常对象）
+            handlerArgs = new Object[] {mi.getMethod(), mi.getArguments(), mi.getThis(), ex};
+        }
+        try {
+            //通过反射调用异常通知中的方法
+            method.invoke(this.throwsAdvice, handlerArgs);
+        }
+        catch (InvocationTargetException targetEx) {
+            throw targetEx.getTargetException();
+        }
+    }
+
+}
+```
+
+从上面可以看出，异常通知，自定义处理异常的方法有几个特点
+
+1. 方法名称必须为`afterThrowing`
+2. 方法参数必须1个或4个，最后一个参数是`Throwable`类型或其子类型
+3. 可以在异常处理中记录一些异常信息，这个还是比较有用的，但是注意一点目标方法抛出的异常最后还是会向外继续抛出`@1`
+
+
+
+##### 实际案例
+
+**光讲源码，大家看着枯燥乏味，来点案例。**
+
+先来一个类，用来模拟用户资金操作：充值、提现、查询资金余额；提现的时候余额不足的时候，会抛出异常。
+
+```csharp
+//模拟资金操作
+public class FundsService {
+    //账户余额
+    private double balance = 1000;
+
+    //模拟提现
+    double recharge(String userName, double price) {
+        System.out.println(String.format("%s提现%s", userName, price));
+        balance += price;
+        return balance;
+    }
+
+    //模拟提现
+    double cashOut(String userName, double price) {
+        if (balance < price) {
+            throw new RuntimeException("余额不足!");
+        }
+        System.out.println(String.format("%s提现%s", userName, price));
+        balance -= price;
+        return balance;
+    }
+
+    //获取余额
+    double getBalance(String userName) {
+        return balance;
+    }
+}
+```
+
+
+
+###### 案例1
+
+**前置通知拦截非法访问**
+
+资金操作的所有方法都需要验证用户名，当用户名不是“路人”的时候，直接抛出非法访问异常。
+
+```java
+import org.junit.Test;
+import org.springframework.aop.MethodBeforeAdvice;
+import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.lang.Nullable;
+
+import java.lang.reflect.Method;
+
+public class AopTest4 {
+
+    @Test
+    public void test1() {
+        //代理工厂
+        ProxyFactory proxyFactory = new ProxyFactory(new FundsService());
+        //添加一个方法前置通知，判断用户名不是“路人”的时候，抛出非法访问异常
+        proxyFactory.addAdvice(new MethodBeforeAdvice() {
+            @Override
+            public void before(Method method, Object[] args, @Nullable Object target) throws Throwable {
+                String userName = (String) args[0];
+                //如果不是路人的时候，抛出非法访问异常
+                if (!"路人".equals(userName)) {
+                    throw new RuntimeException(String.format("[%s]非法访问!", userName));
+                }
+            }
+        });
+        //通过代理工厂创建代理
+        FundsService proxy = (FundsService) proxyFactory.getProxy();
+        //调用代理的方法
+        proxy.recharge("路人", 100);
+        proxy.recharge("张学友", 100);
+    }
+}
+```
+
+运行输出
+
+```
+路人提现100.0
+
+java.lang.RuntimeException: [张学友]非法访问!
+
+    at com.javacode2018.aop.demo4.AopTest4$1.before(AopTest4.java:25)
+    at org.springframework.aop.framework.adapter.MethodBeforeAdviceInterceptor.invoke(MethodBeforeAdviceInterceptor.java:55)
+```
+
+
+
+###### 案例2
+
+**通过异常通知记录异常**
+
+通过异常通知来捕获所有方法的运行，发现异常之后，通知开发修复bug。
+
+```java
+public static class SendMsgThrowsAdvice implements ThrowsAdvice {
+    //注意方法名称必须为afterThrowing
+    public void afterThrowing(Method method, Object[] args, Object target, RuntimeException e) {
+        //监控到异常后发送消息通知开发者
+        System.out.println("异常警报：");
+        System.out.println(String.format("method:[%s]，args:[%s]", method.toGenericString(), 						Arrays.stream(args).collect(Collectors.toList())));
+        System.out.println(e.getMessage());
+        System.out.println("请尽快修复bug！");
+    }
+}
+
+@Test
+public void test2() {
+    //代理工厂
+    ProxyFactory proxyFactory = new ProxyFactory(new FundsService());
+    //添加一个异常通知，发现异常之后发送消息给开发者尽快修复bug
+    proxyFactory.addAdvice(new SendMsgThrowsAdvice());
+    //通过代理工厂创建代理
+    FundsService proxy = (FundsService) proxyFactory.getProxy();
+    //调用代理的方法
+    proxy.cashOut("路人", 2000);
+}
+```
+
+运行输出
+
+```
+异常警报：
+method:[double com.javacode2018.aop.demo4.FundsService.cashOut(java.lang.String,double)]，args:[[路人, 2000.0]]
+余额不足!
+请尽快修复bug！
+
+java.lang.RuntimeException: 余额不足!
+	at com.javacode2018.aop.demo4.FundsService.cashOut(FundsService.java:18)
+```
+
+
+
+#### PointCut
+
+通知（Advice）用来指定**需要增强的逻辑**
+
+![img](https://cdn.jsdelivr.net/gh/WangMinan/Pics/1369022-20211014234115350-834073284.png)
+
+哪些类的哪些方法中需要使用这些通知呢？这个就是通过切入点来配置的，切入点在Spring中对应了一个接口
+
+##### PointCut接口
+
+```java
+package org.springframework.aop;
+
+public interface Pointcut {
+
+    /**
+     * 类过滤器, 可以知道哪些类需要拦截
+     */
+    ClassFilter getClassFilter();
+
+    /**
+     * 方法匹配器, 可以知道哪些方法需要拦截
+     */
+    MethodMatcher getMethodMatcher();
+
+    /**
+     * 匹配所有对象的 Pointcut，内部的2个过滤器默认都会返回true
+     */
+    Pointcut TRUE = TruePointcut.INSTANCE;
+}
+```
+
+
+
+##### ClassFilter接口
+
+比较简单，用来过滤类的
+
+```java
+@FunctionalInterface
+public interface ClassFilter {
+
+    /**
+     * 用来判断目标类型是否匹配
+     */
+    boolean matches(Class<?> clazz);
+}
+```
+
+
+
+##### MethodMatcher接口
+
+用来过滤方法的。
+
+```java
+public interface MethodMatcher {
+
+    /**
+     * 执行静态检查给定方法是否匹配
+     * @param method 目标方法
+     * @param targetClass 目标对象类型
+     */
+    boolean matches(Method method, Class<?> targetClass);
+
+    /**
+     * 是否是动态匹配，即是否每次执行目标方法的时候都去验证一下
+     */
+    boolean isRuntime();
+
+    /**
+     * 动态匹配验证的方法，比第一个matches方法多了一个参数args，这个参数是调用目标方法传入的参数
+     */
+    boolean matches(Method method, Class<?> targetClass, Object... args);
+
+
+    /**
+     * 匹配所有方法，这个内部的2个matches方法任何时候都返回true
+     */
+    MethodMatcher TRUE = TrueMethodMatcher.INSTANCE;
+}
+```
+
+为什么需要2个maches方法？什么是动态匹配？
+
+比如下面一个类
+
+```java
+public class UserService{
+    public void work(String userName){
+        System.out.print(userName+",开始工作了!");
+    }
+}
+```
+
+work方法表示当前用户的工作方法，内部可以实现一些工作的逻辑。
+
+我们希望通过aop对这个类进行增强，调用这个方法的时候，当传入的用户名是`路人的粉丝的`的时候，需要先进行问候，其他用户的时候，无需问候，将这个问题的代码可以放在`MethodBeforeAdvice`中实现，这种情况就是当参数满足一定的条件了，才会使用这个通知，不满足的时候，通知无效，此时就可以使用上面的动态匹配来实现，
+
+`MethodMatcher`类中3个参数的matches方法可以用来对目标方法的参数做校验。
+
+来看一下`MethodMatcher`过滤的整个过程
+
+1. 调用matches(Method method, Class<?> targetClass)方法，验证方法是否匹配
+2. isRuntime方法是否为true，如果为false，则以第一步的结果为准，否则继续向下
+3. 调用matches(Method method, Class<?> targetClass, Object... args)方法继续验证，这个方法多了一个参数，可以对目标方法传入的参数进行校验。
+
+通过上面的过程，大家可以看出来，如果`isRuntime`为false的时候，只需要对方法名称进行校验，当目标方法调用多次的时候，实际上第一步的验证结果是一样的，所以如果`isRuntime`为false的情况，可以将验证结果放在缓存中，提升效率，而spring内部就是这么做的，`isRuntime`为false的时候，需要每次都进行校验，效率会低一些，不过对性能的影响基本上可以忽略。
+
+
+
+#### Advisor
+
+通知定义了需要做什么，切入点定义了在哪些类的哪些方法中执行通知，那么需要将他们2个组合起来才有效啊。
+
+顾问（Advisor）就是做这个事情的。
+
+![img](https://cdn.jsdelivr.net/gh/WangMinan/Pics/1369022-20211014234133432-1182028968.png)
+
+##### Advisor接口
+
+```java
+package org.springframework.aop;
+
+import org.aopalliance.aop.Advice;
+
+/**
+ * 包含AOP通知（在joinpoint处执行的操作）和确定通知适用性的过滤器（如切入点[PointCut]）的基本接口。
+ * 这个接口不是供Spring用户使用的，而是为了支持不同类型的建议的通用性。
+ */
+public interface Advisor {
+    /**
+     * 返回引用的通知
+     */
+    Advice getAdvice();
+}
+```
+
+上面这个接口通常不会直接使用，这个接口有2个子接口，通常我们会和这2个子接口来打交道，下面看一下这2个子接口。
+
+![640-4](https://cdn.jsdelivr.net/gh/WangMinan/Pics/640-4.png)
+
+
+
+##### PointcutAdvisor接口
+
+通过名字就能看出来，这个和Pointcut有关，内部有个方法用来获取`Pointcut`，AOP使用到的大部分Advisor都属于这种类型的。
+
+在目标方法中实现各种增强功能基本上都是通过PointcutAdvisor来实现的。
+
+```java
+package org.springframework.aop;
+
+/**
+ * 切入点类型的Advisor
+ */
+public interface PointcutAdvisor extends Advisor {
+
+    /**
+     * 获取顾问中使用的切入点
+     */
+    Pointcut getPointcut();
+}
+```
+
+##### IntroductionAdvisor接口
+
+一个Java类，没有实现A接口，在不修改Java类的情况下，使其具备A接口的功能。可以通过IntroductionAdvisor给目标类引入更多接口的功能。
+
+
+
+### 案例演示
+
+定义一个`UserService`类
+
+```java
+public class UserService {
+    public void work(String userName) {
+        System.out.println(userName + ",正在和路人甲java一起学Spring Aop，欢迎大家一起来！");
+    }
+}
+```
+
+需要通过AOP实现一些需求，来增强work方法的功能
+
+#### 案例1
+
+需求：在work方法执行之前，打印一句：你好：userName
+
+我们使用硬编码，不借助SpringAOP的情况来编写代码，得到的代码如下所示
+
+```java
+@Test
+public void test1() {
+    //定义目标对象
+    UserService target = new UserService();
+    //创建pointcut，用来拦截UserService中的work方法
+    Pointcut pointcut = new Pointcut() {
+        @Override
+        public ClassFilter getClassFilter() {
+            //判断是否是UserService类型的
+            return clazz -> UserService.class.isAssignableFrom(clazz);
+        }
+
+        @Override
+        public MethodMatcher getMethodMatcher() {
+            return new MethodMatcher() {
+                @Override
+                public boolean matches(Method method, Class<?> targetClass) {
+                    //判断方法名称是否是work
+                    return "work".equals(method.getName());
+                }
+
+                @Override
+                public boolean isRuntime() {
+                    return false;
+                }
+
+                @Override
+                public boolean matches(Method method, Class<?> targetClass, Object... args) {
+                    return false;
+                }
+            };
+        }
+    };
+    //创建通知，此处需要在方法之前执行操作，所以需要用到MethodBeforeAdvice类型的通知
+    MethodBeforeAdvice advice = (method, args, target1) -> System.out.println("你好:" + args[0]);
+
+    //创建Advisor，将pointcut和advice组装起来
+    DefaultPointcutAdvisor advisor = new DefaultPointcutAdvisor(pointcut, advice);
+
+    //通过spring提供的代理创建工厂来创建代理
+    ProxyFactory proxyFactory = new ProxyFactory();
+    //为工厂指定目标对象
+    proxyFactory.setTarget(target);
+    //调用addAdvisor方法，为目标添加增强的功能，即添加Advisor，可以为目标添加很多个Advisor
+    proxyFactory.addAdvisor(advisor);
+    //通过工厂提供的方法来生成代理对象
+    UserService userServiceProxy = (UserService) proxyFactory.getProxy();
+
+    //调用代理的work方法
+    userServiceProxy.work("路人");
+}
+```
+
+输出结果为
+
+```
+你好:路人
+路人,正在和路人甲java一起学Spring Aop，欢迎大家一起来！
+```
+
+
+
+#### 案例2
+
+需求：统计一下work方法的耗时，将耗时输出
+
+```java
+@Test
+public void test2() {
+    //定义目标对象
+    UserService target = new UserService();
+    //创建pointcut，用来拦截UserService中的work方法
+    Pointcut pointcut = new Pointcut() {
+        @Override
+        public ClassFilter getClassFilter() {
+            //判断是否是UserService类型的
+            return clazz -> UserService.class.isAssignableFrom(clazz);
+        }
+
+        @Override
+        public MethodMatcher getMethodMatcher() {
+            return new MethodMatcher() {
+                @Override
+                public boolean matches(Method method, Class<?> targetClass) {
+                    //判断方法名称是否是work
+                    return "work".equals(method.getName());
+                }
+
+                @Override
+                public boolean isRuntime() {
+                    return false;
+                }
+
+                @Override
+                public boolean matches(Method method, Class<?> targetClass, Object... args) {
+                    return false;
+                }
+            };
+        }
+    };
+    
+    //创建通知，需要拦截方法的执行，所以需要用到MethodInterceptor类型的通知
+    MethodInterceptor advice = new MethodInterceptor() {
+        @Override
+        public Object invoke(MethodInvocation invocation) throws Throwable {
+            System.out.println("准备调用:" + invocation.getMethod());
+            long starTime = System.nanoTime();
+            Object result = invocation.proceed();
+            long endTime = System.nanoTime();
+            System.out.println(invocation.getMethod() + "，调用结束！");
+            System.out.println("耗时(纳秒):" + (endTime - starTime));
+            return result;
+        }
+    };
+
+    //创建Advisor，将pointcut和advice组装起来
+    DefaultPointcutAdvisor advisor = new DefaultPointcutAdvisor(pointcut, advice);
+
+    //通过spring提供的代理创建工厂来创建代理
+    ProxyFactory proxyFactory = new ProxyFactory();
+    //为工厂指定目标对象
+    proxyFactory.setTarget(target);
+    //调用addAdvisor方法，为目标添加增强的功能，即添加Advisor，可以为目标添加很多个Advisor
+    proxyFactory.addAdvisor(advisor);
+    //通过工厂提供的方法来生成代理对象
+    UserService userServiceProxy = (UserService) proxyFactory.getProxy();
+
+    //调用代理的work方法
+    userServiceProxy.work("路人");
+}
+```
+
+输出
+
+```
+准备调用:public void com.javacode2018.aop.demo3.UserService.work(java.lang.String)
+路人,正在和路人甲java一起学Spring Aop，欢迎大家一起来！
+public void com.javacode2018.aop.demo3.UserService.work(java.lang.String)，调用结束！
+耗时(纳秒):9526200
+```
 
 
 

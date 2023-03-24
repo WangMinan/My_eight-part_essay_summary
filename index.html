@@ -25,7 +25,7 @@
     <!-- mermaid -->
     <script src="//fastly.jsdelivr.net/npm/mermaid@8.0.0-rc.8/dist/mermaid.min.js"></script>
 
-    <div style="margin:auto; width: 300px; height: 50px;" id="app">🏃‍🏃‍🏃‍💨稍等一下,很快就好啦！...</div>
+    <div style="text-align: center;" id="app">🏃‍🏃‍🏃‍💨稍等一下,很快就好啦！...</div>
 
     <script>
       mermaid.initialize({
@@ -41,6 +41,7 @@
         subMaxLevel: 5,
         auto2top: true,
         search : 'auto',
+        notFoundPage: true,
         plugins:[
           EditOnGithubPlugin.create(
             'https://github.com/WangMinan/my_eight-part_essay_summary/blob/main/',
