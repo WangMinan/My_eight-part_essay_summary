@@ -69,19 +69,6 @@ refresh 是 `AbstractApplicationContext` 中的一个方法，负责初始化 `A
 **案例演示: 如何获取@Value中的内容**
 
 ```java
-import org.springframework.beans.factory.annotation.QualifierAnnotationAutowireCandidateResolver;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.beans.factory.config.BeanExpressionContext;
-import org.springframework.beans.factory.config.DependencyDescriptor;
-import org.springframework.beans.factory.support.DefaultListableBeanFactory;
-import org.springframework.context.expression.StandardBeanExpressionResolver;
-import org.springframework.core.env.Environment;
-import org.springframework.core.env.StandardEnvironment;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.core.io.support.ResourcePropertySource;
-
-import java.io.IOException;
-
 // 如何获得和解析 @Value 内容
 public class TestEnvironment {
     public static void main(String[] args) throws NoSuchFieldException, IOException {
@@ -169,18 +156,6 @@ class version:61.0
 **代码演示**
 
 ```java
-package day04.refresh;
-
-import org.springframework.beans.factory.support.BeanDefinitionBuilder;
-import org.springframework.beans.factory.support.DefaultListableBeanFactory;
-import org.springframework.beans.factory.xml.XmlBeanDefinitionReader;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.ClassPathBeanDefinitionScanner;
-import org.springframework.context.annotation.ConfigurationClassPostProcessor;
-import org.springframework.core.io.ClassPathResource;
-
-import java.util.Arrays;
-
 // 演示各种 BeanDefinition 的来源
 public class TestBeanDefinition {
     public static void main(String[] args) {
@@ -274,7 +249,9 @@ public class TestBeanDefinition {
 
 ![image-20210902183232114](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20210902183232114.png)
 
-**6. registerBeanPostProcessors**
+
+
+### 1.6 registerBeanPostProcessors
 
 * 这一步是继续从 beanFactory 中找出 bean 后处理器，添加至 beanPostProcessors 集合中
 * bean 后处理器，充当 bean 的扩展点，可以工作在 bean 的实例化、依赖注入、初始化阶段，常见的有：
@@ -284,57 +261,173 @@ public class TestBeanDefinition {
 
 ![image-20210902183520307](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20210902183520307.png)
 
-**7. initMessageSource**
+**代码样例**
 
-* 这一步是为 ApplicationContext 添加 messageSource 成员，实现国际化功能
+```java
+public class TestBeanPostProcessor {
+
+    public static void main(String[] args) {
+        GenericApplicationContext context = new GenericApplicationContext();
+        DefaultListableBeanFactory beanFactory = context.getDefaultListableBeanFactory();
+        // 基础语句
+        beanFactory.registerBeanDefinition("bean1", 
+                                       BeanDefinitionBuilder
+                                           .genericBeanDefinition(Bean1.class)
+                                           .getBeanDefinition());
+        beanFactory.registerBeanDefinition("bean2", 
+                                       BeanDefinitionBuilder
+                                           .genericBeanDefinition(Bean2.class)
+                                           .getBeanDefinition());
+        beanFactory.registerBeanDefinition("bean3", 
+                                       BeanDefinitionBuilder
+                                           .genericBeanDefinition(Bean3.class)
+                                           .getBeanDefinition());
+        beanFactory.registerBeanDefinition("aspect1", 
+                                       BeanDefinitionBuilder
+                                           .genericBeanDefinition(Aspect1.class)
+                                           .getBeanDefinition());
+        // 添加用于处理@Autowired的bean后处理器
+        beanFactory.registerBeanDefinition("processor1",
+                BeanDefinitionBuilder
+                   .genericBeanDefinition(
+                       AutowiredAnnotationBeanPostProcessor.class).getBeanDefinition());
+        // 添加用于处理@Resource的bean后处理器
+        beanFactory.registerBeanDefinition("processor2",
+                BeanDefinitionBuilder.genericBeanDefinition(
+                    CommonAnnotationBeanPostProcessor.class).getBeanDefinition());
+        // 添加用于处理@Aspect的bean后处理器
+        beanFactory.registerBeanDefinition("processor3",       						
+            BeanDefinitionBuilder.genericBeanDefinition(                                                   	 				AnnotationAwareAspectJAutoProxyCreator.class).getBeanDefinition());
+        context.refresh();
+        beanFactory.getBean(Bean1.class).foo();
+    }
+
+    static class Bean1 {
+        Bean2 bean2;
+        Bean3 bean3;
+
+        @Autowired
+        public void setBean2(Bean2 bean2) {
+            System.out.println("发生了依赖注入..." + bean2);
+            this.bean2 = bean2;
+        }
+
+        @Resource
+        public void setBean3(Bean3 bean3) {
+            System.out.println("发生了依赖注入..." + bean3);
+            this.bean3 = bean3;
+        }
+
+        public void foo() {
+            System.out.println("foo");
+        }
+    }
+
+    static class Bean2 {
+
+    }
+
+    static class Bean3 {
+
+    }
+
+    // 切面
+    @Aspect
+    static class Aspect1 {
+        @Before("execution(* foo())")
+        public void before() {
+            System.out.println("before...");
+        }
+    }
+}
+```
+
+在仅注册bean1,bean2,bean3与aspect1，无**bean的后处理器**的情况下输出情况如下：
+
+```
+foo
+
+进程已结束,退出代码0
+```
+
+并没有执行`@Autowired`与`@Resource`,也没有执行切面`@Aspect`，仅执行了foo方法
+
+加上bean后处理器后，输出变为
+
+```
+发生了依赖注入...day04.refresh.TestBeanPostProcessor$Bean3@64ec96c6
+发生了依赖注入...day04.refresh.TestBeanPostProcessor$Bean2@2f666ebb
+before...
+foo
+```
+
+与我们期待的结果一致了
+
+
+
+### 1.7 initMessageSource
+
+从beanFactory回到了application context，给其中一些对象赋值
+
+* 这一步是为 ApplicationContext 添加 messageSource 成员，实现**国际化**功能
 * 去 beanFactory 内找名为 messageSource 的 bean，如果没有，则提供空的 MessageSource 实现
 
 ![image-20210902183819984](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20210902183819984.png)
 
-**8. initApplicationContextEventMulticaster**
 
-* 这一步为 ApplicationContext 添加事件广播器成员，即 applicationContextEventMulticaster
+
+### 1.8 initApplicationContextEventMulticaster
+
+* 这一步为 `ApplicationContext` 添加事件广播器成员，即 `applicationContextEventMulticaster`
 * 它的作用是发布事件给监听器
-* 去 beanFactory 找名为 applicationEventMulticaster 的 bean 作为事件广播器，若没有，会创建默认的事件广播器
-* 之后就可以调用 ApplicationContext.publishEvent(事件对象) 来发布事件
+* 去 beanFactory 找名为 `applicationEventMulticaster` 的 bean 作为事件广播器，若没有，会创建默认的事件广播器
+* 之后就可以调用 `ApplicationContext.publishEvent(事件对象)` 来发布事件
 
 ![image-20210902183943469](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20210902183943469.png)
 
-**9. onRefresh**
+
+
+### 1.9 onRefresh
 
 * 这一步是空实现，留给子类扩展
-  * SpringBoot 中的子类在这里准备了 WebServer，即内嵌 web 容器
+  * SpringBoot 中的子类在这里**准备了 WebServer**，即内嵌 web 容器
 * 体现的是模板方法设计模式
 
-**10. registerListeners**
 
-* 这一步会从多种途径找到事件监听器，并添加至 applicationEventMulticaster
+
+### 1.10 registerListeners
+
+* 这一步会从多种途径找到事件监听器，并添加至 `applicationEventMulticaster`
 * 事件监听器顾名思义，用来接收事件广播器发布的事件，有如下来源
   * 事先编程添加的
   * 来自容器中的 bean
-  * 来自于 @EventListener 的解析
-* 要实现事件监听器，只需要实现 ApplicationListener 接口，重写其中 onApplicationEvent(E e) 方法即可
+  * 来自于 `@EventListener` 的解析
+* 要实现事件监听器，只需要实现 `ApplicationListener` 接口，重写其中 `onApplicationEvent(E e)` 方法即可
 
-![image-20210902184343872](D:\0_大学\2023.2\Java自学\Java面试专题-资料\day04-框架篇\讲义\img\image-20210902184343872.png)
+![image-20210902184343872](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20210902184343872.png)
 
-**11. finishBeanFactoryInitialization**
+
+
+### 1.11 finishBeanFactoryInitialization
 
 * 这一步会将 beanFactory 的成员补充完毕，并初始化所有非延迟单例 bean
-* conversionService 也是一套转换机制，作为对 PropertyEditor 的补充
-* embeddedValueResolvers 即内嵌值解析器，用来解析 @Value 中的 ${ }，借用的是 Environment 的功能
+* `conversionService` 也是一套转换机制，[作为对`PropertyEditor`的补充](#1.3 prepareBeanFactory).
+* `embeddedValueResolvers` 即内嵌值解析器，用来解析 @Value 中的 ${ }，借用的是 Environment 的功能
 * singletonObjects 即单例池，缓存所有单例对象
   * 对象的创建都分三个阶段，每一阶段都有不同的 bean 后处理器参与进来，扩展功能
 
-![image-20210902184641623](D:\0_大学\2023.2\Java自学\Java面试专题-资料\day04-框架篇\讲义\img\image-20210902184641623.png)
+![image-20210902184641623](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20210902184641623.png)
 
-**12. finishRefresh**
 
-* 这一步会为 ApplicationContext 添加 lifecycleProcessor 成员，用来控制容器内需要生命周期管理的 bean
-* 如果容器中有名称为 lifecycleProcessor 的 bean 就用它，否则创建默认的生命周期管理器
+
+### 1.12 finishRefresh
+
+* 这一步会为 `ApplicationContext` 添加 `lifecycleProcessor` 成员，用来控制容器内需要生命周期管理的 bean
+* 如果容器中有名称为 `lifecycleProcessor` 的 bean 就用它，否则创建默认的生命周期管理器
 * 准备好生命周期管理器，就可以实现
   * 调用 context 的 start，即可触发所有实现 LifeCycle 接口 bean 的 start
   * 调用 context 的 stop，即可触发所有实现 LifeCycle 接口 bean 的 stop
-* 发布 ContextRefreshed 事件，整个 refresh 执行完成
+* 发布 `ContextRefreshed` 事件，整个 refresh 执行完成
 
 ![image-20210902185052433](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20210902185052433.png)
 
@@ -364,33 +457,203 @@ bean 的生命周期从调用 beanFactory 的 getBean 开始，到这个 bean �
 
 
 
-**1. 处理名称，检查缓存**
+### 2.1 处理名称，检查缓存
+
+```java
+protected <T> T doGetBean(
+        String name, 
+        @Nullable Class<T> requiredType, 
+        @Nullable Object[] args, 
+        boolean typeCheckOnly) throws BeansException
+```
 
 * 这一步会处理别名，将别名解析为实际名称
 * 对 FactoryBean 也会特殊处理，如果以 & 开头表示要获取 FactoryBean 本身，否则表示要获取其产品
 * 这里针对单例对象会检查一级、二级、三级缓存
-  * singletonFactories 三级缓存，存放单例工厂对象
-  * earlySingletonObjects 二级缓存，存放单例工厂的产品对象
+  * singletonFactories 三级缓存，存放**单例工厂**对象
+  * earlySingletonObjects 二级缓存，存放**单例工厂的产品**对象
     * 如果发生循环依赖，产品是代理；无循环依赖，产品是原始对象
-  * singletonObjects 一级缓存，存放单例成品对象
+  * singletonObjects 一级缓存，存放**单例成品**对象
 
-**2. 处理父子容器**
+
+
+### 2.2 处理父子容器
 
 * 如果当前容器根据名字找不到这个 bean，此时若父容器存在，则执行父容器的 getBean 流程
+
 * 父子容器的 bean 名称可以重复
 
-**3. 处理 dependsOn**
+  
 
-* 如果当前 bean 有通过 dependsOn 指定了非显式依赖的 bean，这一步会提前创建这些 dependsOn 的 bean 
+### 2.3 处理 dependsOn
+
+* 如果当前 bean 有通过 dependsOn 指定了**非显式依赖的 bean**，这一步会提前创建这些 dependsOn 的 bean 
 * 所谓非显式依赖，就是指两个 bean 之间不存在直接依赖关系，但需要控制它们的创建先后顺序
 
-**4. 选择 scope 策略**
 
-* 对于 singleton scope，首先到单例池去获取 bean，如果有则直接返回，没有再进入创建流程
-* 对于 prototype scope，每次都会进入创建流程
-* 对于自定义 scope，例如 request，首先到 request 域获取 bean，如果有则直接返回，没有再进入创建流程
 
-**5.1 创建 bean - 创建 bean 实例**
+### 2.4 选择 scope 策略
+
+scope理解为"从XX范围内找到bean"更贴切。
+
+#### 2.4.0 补充知识：Spring Scope
+
+> cope用来声明容器中的对象所应该处的限定场景或者说该对象的存活时间，即容器在对象进入其相应的scope之前生成并装配这些对象，在该对象不再处于这些scope的限定之后，容器通常会销毁这些对象。
+
++ **singleton**
+
+  singleton**是容器默认的scope**，所以写和不写没有区别。scope为singleton的时候，**在Spring的IoC容器中只存在一个实例**，所有对该对象的引用将共享这个实例。**该实例从容器启动，并因为第一次被请求而初始化后，将一直存活到容器退出**，也就是说，它与IoC容器“几乎”拥有相同的寿命。
+
+  singleton的bean所具有的属性
+
+  - **对象实例数量**：singleton类型的bean定义，在一个容器中只存在一个共享实例，**所有对该类型bean的依赖都引用这一单一实例**
+  - **对象存活时间**：singleton类型bean定义，从容器启动，到它第一次被请求而实例化开始，只要容器不销毁或退出，该类型的单一实例就会**一直存活**
+
++ **prototype**
+
+  对于那些请求方**不能共享的对象实例**，应该将其bean定义的scope设置为prototype。这样，每个请求方可以得到**自己对应的一个对象实例**。通常，声明为prototype的scope的bean定义类型，都是一些有状态的，比如保存每个顾客信息的对象.
+
++ **request、session、global session**
+
+  这三个scope类型是Spring2.0之后新增加的，它们不像上面两个那么通用，**它们只适用于Web应用程序**，通常是与`XmlWebApplicationContext`共同使用(注意：只能使用scope属性才能使用这三种，也就是必须使用XSD文档声明的XML配置文件格式)
+
+  + request
+
+    在Spring容器中，即`XmlWebApplicationContext`会为每**个HTTP请求创建一个全新的Request-Processor对象**供当前请求使用，**当请求结束后，该对象实生命周期就结束**。当同时有10个HTTP请求进来的时候，容器会分别针对这10个请求返回10个全新的RequestProcessor对象实例，且它们之间互不干扰。所以严格意义上说request可以看作prototype的一种特例，除了request的场景更加具体.
+
+  + session
+
+    放到session中的最普遍的信息就是用户登录信息，Spring容器会为每个独立的session创建属于它们自己全新的UserPreferences对象实例。与request相比，除了拥有session scope的bean比request scope的bean可能更长的存活时间，其他没什么差别.
+
+  + global session
+
+    global session只有应用在基于portlet的Web应用程序中才有意义，它映射到portlet的global范围的session。如果在普通的基于servlet的Web应用中使了用这个类型的scope，容器会将其作为普通的session类型的scope来对待
+
+#### 2.4.1 一个案例与三种策略
+
+我们这里有一个bean。这个bean在被初始化和销毁前会打印输出，我们来看一下下列三种scope的情况。
+
+```java
+static class Bean1 {
+    @PostConstruct
+    public void init() {
+        LoggerUtils.get().debug("{} - init", this);
+    }
+
+    @PreDestroy
+    public void destroy() {
+        LoggerUtils.get().debug("{} - destroy", this);
+    }
+}
+```
+
+* **对于 singleton scope**，首先到单例池去获取 bean，如果有则直接返回，没有再进入创建流程
+
+  ```java
+  // 单例 bean 从 refresh 被创建, 到 close 被销毁, BeanFactory 会记录哪些 bean 要调用销毁方法
+  private static void testSingletonScope() {
+      GenericApplicationContext context = new GenericApplicationContext();
+      context.registerBean("bean1", Bean1.class);
+      context.registerBean(CommonAnnotationBeanPostProcessor.class);
+      context.refresh(); // 直接调用getBean方法被初始化
+      context.close(); // 调用销毁方法进行销毁
+  }
+  ```
+
+  输出如下
+
+  ```
+  [DEBUG] 20:41:22.022 [main] - day04.bean.TestScope$Bean1@7eac9008 - init 
+  [DEBUG] 20:41:22.045 [main] - day04.bean.TestScope$Bean1@7eac9008 - destroy 
+  ```
+
+  可以看到初始化和销毁方法都被正确地执行了
+
+* **对于 prototype scope**，每次都会进入创建流程
+
+  ```java
+  // 多例 bean 从首次 getBean 被创建, 到调用 BeanFactory 的 destroyBean 被销毁
+  private static void testPrototypeScope() {
+      GenericApplicationContext context = new GenericApplicationContext();
+      // 注册时需要声明bean1不是单例而是多例
+      context.registerBean("bean1", Bean1.class, bd -> bd.setScope("prototype"));
+      context.registerBean(CommonAnnotationBeanPostProcessor.class);
+      context.refresh(); // 未初始化
+      
+  	// 此时(通过getBean使用时)才初始化
+      Bean1 bean = context.getBean(Bean1.class);
+      // 没谁记录该 bean 要调用销毁方法, 需要我们自行调用
+      context.getDefaultListableBeanFactory().destroyBean(bean);
+  
+      context.close();
+  }
+  ```
+
+  注意懒加载机制 输出如下
+
+  ```
+  [DEBUG] 20:49:54.410 [main] - day04.bean.TestScope$Bean1@6ab778a - init 
+  [DEBUG] 20:49:54.414 [main] - day04.bean.TestScope$Bean1@6ab778a - destroy 
+  ```
+
+* **对于自定义 scope**，例如 request，首先到 request 域获取 bean，如果有则直接返回，没有再进入创建流程
+
+  ```java
+  // request bean 从首次 getBean 被创建, 到 request 结束前被销毁
+  private static void testRequestScope() {
+      GenericApplicationContext context = new GenericApplicationContext();
+      // 注册一个RequestScope
+      context.getDefaultListableBeanFactory().registerScope("request", new RequestScope());
+      // 注册bean 声明其scope为RequestScope
+      context.registerBean("bean1", Bean1.class, bd -> bd.setScope("request"));
+      context.registerBean(CommonAnnotationBeanPostProcessor.class);
+      context.refresh();
+  
+      for (int i = 0; i < 2; i++) {
+          new Thread(() -> {
+              MockHttpServletRequest request = new MockHttpServletRequest();
+              // 每个 webRequest 对象会记录哪些 bean 要调用销毁方法
+              ServletWebRequest webRequest = new ServletWebRequest(request);
+              RequestContextHolder.setRequestAttributes(webRequest);
+  
+              // bean被存入request的作用域 对同一个request多次执行获取bean操作获取的是同一个bean
+              Bean1 bean = context.getBean(Bean1.class);
+              LoggerUtils.get().debug("{}", bean);
+              LoggerUtils.get().debug("{}", request.getAttribute("bean1"));
+  
+              // request 请求结束前调用这些销毁方法
+              webRequest.requestCompleted();
+          }).start();
+      }
+  }
+  ```
+
+  通过多个线程进行调用 输出如下
+
+  ```
+  [DEBUG] 21:06:10.985 [Thread-0] - day04.bean.TestScope$Bean1@1f669b69 - init 
+  [DEBUG] 21:06:10.985 [Thread-1] - day04.bean.TestScope$Bean1@3ed2f85a - init 
+  [DEBUG] 21:06:10.989 [Thread-0] - day04.bean.TestScope$Bean1@1f669b69 
+  [DEBUG] 21:06:10.989 [Thread-1] - day04.bean.TestScope$Bean1@3ed2f85a 
+  [DEBUG] 21:06:10.990 [Thread-0] - day04.bean.TestScope$Bean1@1f669b69 
+  [DEBUG] 21:06:10.990 [Thread-1] - day04.bean.TestScope$Bean1@3ed2f85a 
+  [DEBUG] 21:06:10.990 [Thread-0] - day04.bean.TestScope$Bean1@1f669b69 - destroy 
+  [DEBUG] 21:06:10.990 [Thread-1] - day04.bean.TestScope$Bean1@3ed2f85a - destroy 
+  
+  进程已结束,退出代码0
+  ```
+
+  可见在每一个线程(request)中的bean是一致的
+
+
+
+### 2.5 创建bean
+
+总体流程
+
+![image-20230328213702796](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230328213702796.png)
+
+#### 2.5.1 创建 bean 实例
 
 | **要点**                             | **总结**                                                     |
 | ------------------------------------ | ------------------------------------------------------------ |
@@ -401,7 +664,7 @@ bean 的生命周期从调用 beanFactory 的 getBean 开始，到这个 bean �
 | mbd.getPreferredConstructors         | 选择所有公共构造，这些构造之间按权重筛选                     |
 | 采用默认构造                         | 如果上面的后处理器和 BeanDefiniation 都没找到构造，采用默认构造，即使是私有的 |
 
-**5.2 创建 bean - 依赖注入**
+#### 2.5.2 依赖注入
 
 | **要点**                             | **总结**                                                     |
 | ------------------------------------ | ------------------------------------------------------------ |
@@ -412,7 +675,93 @@ bean 的生命周期从调用 beanFactory 的 getBean 开始，到这个 bean �
 | AUTOWIRE_BY_TYPE                     | 根据成员类型执行 resolveDependency 找到依赖注入的值，修改  mbd 的 propertyValues |
 | applyPropertyValues                  | 根据 mbd 的 propertyValues 进行依赖注入（即xml中 `<property name ref|value/>`） |
 
-**5.3 创建 bean - 初始化**
+有测试代码如下所示
+
+```java
+// 测试如果对同一属性进行的 @Autowired 注入、AUTOWIRE_BY_NAME、精确指定注入名称, 优先级是怎样的
+public class TestInjection {
+    public static void main(String[] args) {
+        GenericApplicationContext context = new GenericApplicationContext();
+        AnnotationConfigUtils.registerAnnotationConfigProcessors(context.getDefaultListableBeanFactory());
+        context.registerBean("bean1", Bean1.class, bd -> {
+            // 优先级最高的：精确指定注入 bean 的名称 <property name="bean3" ref="bean2"/>
+            bd.getPropertyValues().add("bean3", new RuntimeBeanReference("bean2"));
+            // 优先级次之的：通过 AUTOWIRE_BY_NAME 匹配
+            ((RootBeanDefinition) bd).setAutowireMode(AbstractBeanDefinition.AUTOWIRE_BY_NAME);
+        });
+        context.registerBean("bean2", Bean2.class);
+        context.registerBean("bean3", Bean3.class);
+        context.registerBean("bean4", Bean4.class);
+
+        context.refresh();
+    }
+
+    static class Bean1 {
+        MyInterface bean;
+
+        // 有三个bean实现了MyInterface 因此需要使用Qualifier指定注入对象
+        // 优先级最低的：@Autowired 匹配
+        @Autowired @Qualifier("bean4")
+        public void setBean3(MyInterface bean) {
+            System.out.println(bean);
+            this.bean = bean;
+        }
+    }
+
+    interface MyInterface {
+    }
+
+    static class Bean2 implements MyInterface {
+    }
+
+    static class Bean3 implements MyInterface {
+    }
+
+    static class Bean4 implements MyInterface {
+    }
+}
+```
+
+若注释掉
+
+```java
+// 优先级最高的：精确指定注入 bean 的名称 <property name="bean3" ref="bean2"/>
+bd.getPropertyValues().add("bean3", new RuntimeBeanReference("bean2"));
+// 优先级次之的：通过 AUTOWIRE_BY_NAME 匹配
+((RootBeanDefinition) bd).setAutowireMode(AbstractBeanDefinition.AUTOWIRE_BY_NAME);
+```
+
+则使用默认优先级，此时输出
+
+```
+day04.bean.TestInjection$Bean4@28f2a10f
+
+进程已结束,退出代码0
+```
+
+可见自动装配Bean4，遵循`@Qualifier("bean4")`指定
+
+放开`AUTOWIRE_BY_NAME`，则根据名称进行匹配。由于方法名含有Bean3，因此bean3被装配，此时输出
+
+```java
+day04.bean.TestInjection$Bean3@5acf93bb
+
+进程已结束,退出代码0
+```
+
+可见装配Bean3
+
+放开全部注释，在注入bean时指定优先级，则输出
+
+```
+day04.bean.TestInjection$Bean2@6e0f5f7f
+
+进程已结束,退出代码0
+```
+
+满足我们指定的优先级标准
+
+#### 2.5.3 初始化
 
 | **要点**              | **总结**                                                     |
 | --------------------- | ------------------------------------------------------------ |
@@ -423,7 +772,59 @@ bean 的生命周期从调用 beanFactory 的 getBean 开始，到这个 bean �
 | initMethod            | 根据 BeanDefinition 得到的初始化方法执行初始化，即 `<bean init-method>` 或 @Bean(initMethod) |
 | 创建 aop 代理         | 由 AnnotationAwareAspectJAutoProxyCreator 创建，执行时机在  postProcessAfterInitialization |
 
-**5.4 创建 bean - 注册可销毁 bean**
+样例代码如下
+
+```java
+public class TestInitialization {
+
+    public static void main(String[] args) {
+        GenericApplicationContext context = new GenericApplicationContext();
+        context.registerBean(CommonAnnotationBeanPostProcessor.class);
+        // <bean init-method="initMethod">
+        context.registerBean("bean1", Bean1.class, bd -> bd.setInitMethodName("initMethod"));
+        context.refresh();
+    }
+
+    static class Bean1 implements InitializingBean, BeanFactoryAware {
+
+        @Override
+        public void afterPropertiesSet() throws Exception {
+            System.out.println(1);
+        }
+
+        @PostConstruct
+        public void init() {
+            System.out.println(2);java
+        }
+
+        public void initMethod() {
+            System.out.println(3);
+        }
+
+        @Override
+        public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
+            System.out.println(4);
+        }
+    }
+}
+```
+
+输出情况如下
+
+```java
+4
+2
+1
+3
+
+进程已结束,退出代码0
+```
+
+可见各方法执行顺序为`setBeanFactory` -> `@PostConstruct` -> `afterPropertiesSet()` -> `initMethod()`
+
+先执行`BeanFactoryAware`再执行注解初始化，接口初始化，最后执行自定义方法
+
+#### 2.5.4 注册可销毁 bean
 
 在这一步判断并登记可销毁 bean
 
@@ -436,13 +837,17 @@ bean 的生命周期从调用 beanFactory 的 getBean 开始，到这个 bean �
   * singleton scope 的可销毁 bean 会存储于 beanFactory 的成员当中
   * 自定义 scope 的可销毁 bean 会存储于对应的域对象当中
   * prototype scope 不会存储，需要自己找到此对象销毁
-* 存储时都会封装为 DisposableBeanAdapter 类型对销毁方法的调用进行适配
+* 存储时都会封装为 DisposableBeanAdapter 类型对销毁方法的调用进行适配 -> 适配器模式
 
-**6. 类型转换处理**
+
+
+### 2.6 类型转换处理
 
 * 如果 getBean 的 requiredType 参数与实际得到的对象类型不同，会尝试进行类型转换
 
-**7. 销毁 bean**
+
+
+### 2.7 销毁 bean
 
 * 销毁时机
   * singleton bean 的销毁在 ApplicationContext.close 时，此时会找到所有 DisposableBean 的名字，逐一销毁

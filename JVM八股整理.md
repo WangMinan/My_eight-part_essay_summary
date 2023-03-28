@@ -787,6 +787,97 @@ GC 要点：
 
 
 
+## 反射
+
+### 用途
+
+在理解反射原理前，我们应该知道它的作用，在此之后，去了解它的原理才会有意义。
+
+反射功能通常用于检查或修改Java虚拟机运行中（runtime）的应用程序的行为，这一句话就精准的描述了反射的全部功能，更详细来说可以分为以下几点：
+
+1. 在运行中分析类的能力，可以通过完全限定类名创建类的对象实例。
+
+2. 在运行中查看和操作对象，可以遍历类的成员变量。
+3. 反射允许代码执行非反射代码中非法的操作，可以检索和访问类的私有成员变量，包括私有属性、方法等。
+
+注意：要有选择的使用反射功能，如果可以直接执行操作，那么最好不要使用反射。
+
+
+
+### 原理
+
+在一个方法中，如果我们不知道在实际运行（runtime）时，它将要处理的对象是谁，它的类型信息是怎么样的，那我们如何访问这个对象或为这个对象创建一个新的实例呢？其实这个访问或创建新实例的操作就是反射了。
+
+参考上面的jvm模型，反射首先需要获取到**这个对象存放在方法区的类型信息**，获取到类型信息后，我们就知道这个类的**构造器、属性、方法、注解、子类、父类**等等信息了，这个时候，我们就可以通过这些类型信息来回调处理对象，来完成自己想要的操作了。
+
+没错，这就是反射的原理了。反射在运行时，**通过读取方法区中的字节码，来动态的找到其反射的类以及类的方法和属性等**（实际上就是在运行时，根据全类型名在方法区找对应的类），用这些类型信息完成对该类实例的操作，其实就是直接使用类的一个逆向使用。
+
+```java
+void reflectMethod(Object obj) {
+        // 处理这个无法明确类型的实例对象
+ 
+        // 获取类型信息
+        Class<?> aClass = obj.getClass();
+        Field[] fields = aClass.getFields();
+        Method[] methods = aClass.getMethods();
+        Annotation[] annotations = aClass.getAnnotations();
+        Constructor<?>[] constructors = aClass.getConstructors();
+        Class<?>[] interfaces = aClass.getInterfaces();
+        // ...
+        // 操作属性或方法
+        Field field = fields[0];
+        Object o = field.get(obj); // 获取obj的属性值
+}
+```
+
+反射是运行时先拿到对象，根据对象得到方法区中的类型信息后，再操作该对象。
+
+
+
+### 反射的缺点
+
+1. 额外的性能开销（Performance Overhead）：由于反射涉及动态类型的解析，它无法执行某些Java虚拟机优化，因此反射操作的性能通常要比非反射操作慢。
+
+2. 安全限制（Security Restrictions）：反射需要运行时操作权限，此操作可能在一些安全管理器下不被允许。
+
+3. 内部泄露（Exposure of Internals）：由于反射允许代码执行非反射代码中非法的操作（例如访问私有字段和方法），因此使用反射可能会导致意外的副作用，这可能会使代码无法正常工作并可能破坏可移植性。反射性代码破坏了抽象，因此可能会随着平台的升级而改变行为。
+
+
+
+### 使用方法
+
++ Object.getClass()
+
+  从一个实例对象中获取它的类。这仅适用于继承自Object的引用类型（当然Java的类默认继承于Object）。
+
++ XXX.class
+
+  直接从未实例化的类获取类。
+
++ Class.forName()
+
+  通过完全限定类名获取类。即包名加类名（java.util.HashMap）。否则会报找不到类错误。
+
++ Integer.TYPE(已弃用)
+
++ 通过反射类ClassAPI获取类
+
+  ```java
+  try {
+    Class<?> className = Class.forName("java.lang.String");
+    // 获取父类
+    Class<?> superclass = className.getSuperclass();
+    // 返回调用类的成员变量，包括所有公共的类、接口和枚举
+    Class<?>[] classes = className.getClasses();
+    // 返回调用类的依赖，包括所有类、接口和显式声明的枚举
+    Class<?>[] declaredClasses = className.getDeclaredClasses();
+  } catch (ClassNotFoundException e) {
+    e.printStackTrace();
+  }
+  ```
+
+  
+
 ## 四种引用
 
 **要求**
