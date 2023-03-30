@@ -1185,7 +1185,82 @@ public class App60_4 {
 
 * 掌握事务失效的八种场景
 
-**1. 抛出检查异常导致事务不能正确回滚**
+**基础类**
+
+总体配置类
+
+```java
+@Configuration
+@PropertySource("classpath:jdbc.properties")
+@EnableTransactionManagement
+@EnableAspectJAutoProxy(exposeProxy = true)
+@ComponentScan("day04.tx.app.service")
+@MapperScan("day04.tx.app.mapper") // 配合mybatis
+public class AppConfig {
+
+    // 配置数据源
+    @ConfigurationProperties("jdbc")
+    @Bean
+    public DataSource dataSource() {
+        return new HikariDataSource();
+    }
+
+    @Bean
+    public DataSourceInitializer dataSourceInitializer(DataSource dataSource, DatabasePopulator populator) {
+        DataSourceInitializer dataSourceInitializer = new DataSourceInitializer();
+        dataSourceInitializer.setDataSource(dataSource);
+        dataSourceInitializer.setDatabasePopulator(populator);
+        return dataSourceInitializer;
+    }
+
+    // 初始化器 要求每次执行时都调用account.sql
+    @Bean
+    public DatabasePopulator databasePopulator() {
+        return new ResourceDatabasePopulator(new ClassPathResource("account.sql"));
+    }
+
+    @Bean // 配合mybatis
+    public SqlSessionFactoryBean sqlSessionFactory(DataSource dataSource) {
+        SqlSessionFactoryBean factoryBean = new SqlSessionFactoryBean();
+        factoryBean.setDataSource(dataSource);
+        return factoryBean;
+    }
+
+    @Bean // 启用事务
+    public PlatformTransactionManager transactionManager(DataSource dataSource) {
+        return new DataSourceTransactionManager(dataSource);
+    }
+
+    @Bean
+    // 只要 beanFactory 的 allowBeanDefinitionOverriding==true, 即使系统的 @Bean 定义没
+    // @ConditionalOnMissingBean 条件，也会被我们的同名 @Bean 覆盖掉
+    public TransactionAttributeSource transactionAttributeSource() {
+        return new AnnotationTransactionAttributeSource(false);
+    }
+
+}
+```
+
+
+
+### 4.1 抛出检查异常导致事务不能正确回滚
+
+```java
+public class TestService1 {
+    public static void main(String[] args) throws FileNotFoundException {
+        GenericApplicationContext context = new GenericApplicationContext();
+        AnnotationConfigUtils.registerAnnotationConfigProcessors(context.getDefaultListableBeanFactory());
+        ConfigurationPropertiesBindingPostProcessor.register(context.getDefaultListableBeanFactory());
+        context.registerBean(AppConfig.class);
+        context.refresh();
+
+        Service1 bean = context.getBean(Service1.class);
+        bean.transfer(1, 2, 500);
+    }
+}
+```
+
+被调用的`transfer()`方法如下
 
 ```java
 @Service
@@ -1199,21 +1274,61 @@ public class Service1 {
         int fromBalance = accountMapper.findBalanceBy(from);
         if (fromBalance - amount >= 0) {
             accountMapper.update(from, -1 * amount);
-            new FileInputStream("aaa");
+            new FileInputStream("aaa"); // 构造FileNotFoundException
             accountMapper.update(to, amount);
         }
     }
 }
 ```
 
-* 原因：Spring 默认只会回滚非检查异常
+在上述情况下出现FileNotFoundException事务不回滚
+
+输出如下
+
+```java
+[INFO] 16:44:19.787 [main] - HikariPool-1 - Starting... 
+[INFO] 16:44:20.018 [main] - HikariPool-1 - Start completed. 
+[DEBUG] 16:44:20.106 [main] - Creating new transaction with name [day04.tx.app.service.Service1.transfer]: PROPAGATION_REQUIRED,ISOLATION_DEFAULT,-java.lang.Exception 
+[DEBUG] 16:44:20.107 [main] - Acquired Connection [HikariProxyConnection@1938259481 wrapping com.mysql.cj.jdbc.ConnectionImpl@7b208b45] for JDBC transaction 
+[DEBUG] 16:44:20.108 [main] - Switching JDBC Connection [HikariProxyConnection@1938259481 wrapping com.mysql.cj.jdbc.ConnectionImpl@7b208b45] to manual commit 
+[DEBUG] 16:44:20.133 [main] - ==>  Preparing: select balance from account where accountNo=? for update 
+[DEBUG] 16:44:20.159 [main] - ==> Parameters: 1(Integer) 
+[DEBUG] 16:44:20.210 [main] - <==      Total: 1 
+[DEBUG] 16:44:20.215 [main] - ==>  Preparing: update account set balance=balance+? where accountNo=? 
+[DEBUG] 16:44:20.216 [main] - ==> Parameters: -500(Integer), 1(Integer) 
+[DEBUG] 16:44:20.222 [main] - <==    Updates: 1 
+[DEBUG] 16:44:20.223 [main] - Initiating transaction rollback 
+[DEBUG] 16:44:20.227 [main] - Releasing JDBC Connection [HikariProxyConnection@1938259481 wrapping com.mysql.cj.jdbc.ConnectionImpl@7b208b45] after transaction 
+Exception in thread "main" java.io.FileNotFoundException: aaa (系统找不到指定的文件。)
+	at java.base/java.io.FileInputStream.open0(Native Method)
+	...
+
+进程已结束,退出代码1
+```
+
+未发生回滚，Account中显示的情况如下
+
+![image-20230329164601098](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230329164601098.png)
+
+正常发生回滚时日志应输入如下内容
+
+```
+[DEBUG] 16:44:20.224 [main] - Rolling back JDBC transaction on Connection [HikariProxyConnection@1938259481 wrapping com.mysql.cj.jdbc.ConnectionImpl@7b208b45] 
+```
+
+包含`Rolling back JDBC transaction`
+
+* 原因：Spring 默认只会回滚非检查异常(即RuntimeException与Error，其他Exception不回滚)
 
 * 解法：配置 rollbackFor 属性
-  * `@Transactional(rollbackFor = Exception.class)`
+  * ```java
+    @Transactional(rollbackFor = Exception.class)
+    ```
 
 
 
-**2. 业务方法内自己 try-catch 异常导致事务不能正确回滚**
+
+### 4.2 业务方法内自己 try-catch 异常导致事务不能正确回滚
 
 ```java
 @Service
@@ -1238,9 +1353,33 @@ public class Service2 {
 }
 ```
 
-* 原因：事务通知只有捉到了目标抛出的异常，才能进行后续的回滚处理，如果目标自己处理掉异常，事务通知无法知悉
+输出如下
 
-* 解法1：异常原样抛出
+```java
+[INFO] 16:50:32.730 [main] - HikariPool-1 - Starting... 
+[INFO] 16:50:32.912 [main] - HikariPool-1 - Start completed. 
+[DEBUG] 16:50:32.991 [main] - Creating new transaction with name [day04.tx.app.service.Service2.transfer]: PROPAGATION_REQUIRED,ISOLATION_DEFAULT,-java.lang.Exception 
+[DEBUG] 16:50:32.991 [main] - Acquired Connection [HikariProxyConnection@1938259481 wrapping com.mysql.cj.jdbc.ConnectionImpl@7b208b45] for JDBC transaction 
+[DEBUG] 16:50:32.993 [main] - Switching JDBC Connection [HikariProxyConnection@1938259481 wrapping com.mysql.cj.jdbc.ConnectionImpl@7b208b45] to manual commit 
+[DEBUG] 16:50:33.017 [main] - ==>  Preparing: select balance from account where accountNo=? for update 
+[DEBUG] 16:50:33.067 [main] - ==> Parameters: 1(Integer) 
+[DEBUG] 16:50:33.120 [main] - <==      Total: 1 
+[DEBUG] 16:50:33.129 [main] - ==>  Preparing: update account set balance=balance+? where accountNo=? 
+[DEBUG] 16:50:33.129 [main] - ==> Parameters: -500(Integer), 1(Integer) 
+[DEBUG] 16:50:33.133 [main] - <==    Updates: 1 
+[DEBUG] 16:50:33.136 [main] - Initiating transaction commit 
+
+直接提交并释放连接 未回滚
+[DEBUG] 16:50:33.136 [main] - Committing JDBC transaction on Connection [HikariProxyConnection@1938259481 wrapping com.mysql.cj.jdbc.ConnectionImpl@7b208b45] 
+[DEBUG] 16:50:33.140 [main] - Releasing JDBC Connection [HikariProxyConnection@1938259481 wrapping com.mysql.cj.jdbc.ConnectionImpl@7b208b45] after transaction 
+java.io.FileNotFoundException: aaa (系统找不到指定的文件。)
+```
+
+我们看到在发生异常之前的第一次update操作已经被`Committing JDBC transaction on Connection`，日志中并没有回滚操作
+
+* 原因：**事务通知只有捉到了目标抛出的异常，才能进行后续的回滚处理**，如果目标自己处理掉异常，事务通知无法知悉
+
+* 解法1：异常**原样抛出**
   * 在 catch 块添加 `throw new RuntimeException(e);`
 
 * 解法2：手动设置 TransactionStatus.setRollbackOnly()
@@ -1248,7 +1387,7 @@ public class Service2 {
 
 
 
-**3. aop 切面顺序导致导致事务不能正确回滚**
+### 4.3 aop 切面顺序导致导致事务不能正确回滚
 
 ```java
 @Service
@@ -1269,7 +1408,7 @@ public class Service3 {
 }
 ```
 
-
+调用方法中有一切面，如下
 
 ```java
 @Aspect
@@ -1287,14 +1426,82 @@ public class MyAspect {
 }
 ```
 
+此时输出如下
+
+```java
+[INFO] 17:06:30.668 [main] - HikariPool-1 - Starting... 
+[INFO] 17:06:30.850 [main] - HikariPool-1 - Start completed. 
+
+先进入了事务切面
+[DEBUG] 17:06:30.914 [main] - Creating new transaction with name [day04.tx.app.service.Service3.transfer]: PROPAGATION_REQUIRED,ISOLATION_DEFAULT,-java.lang.Exception 
+[DEBUG] 17:06:30.914 [main] - Acquired Connection [HikariProxyConnection@2036704540 wrapping com.mysql.cj.jdbc.ConnectionImpl@3eee3e2b] for JDBC transaction 
+[DEBUG] 17:06:30.915 [main] - Switching JDBC Connection [HikariProxyConnection@2036704540 wrapping com.mysql.cj.jdbc.ConnectionImpl@3eee3e2b] to manual commit 
+
+然后再进入了自定义切面
+[DEBUG] 17:06:30.917 [main] - log:day04.tx.app.service.Service3@cc239ba 
+
+最里层: 目标方法
+[DEBUG] 17:06:30.936 [main] - ==>  Preparing: select balance from account where accountNo=? for update 
+[DEBUG] 17:06:30.963 [main] - ==> Parameters: 1(Integer) 
+[DEBUG] 17:06:31.006 [main] - <==      Total: 1 
+[DEBUG] 17:06:31.011 [main] - ==>  Preparing: update account set balance=balance+? where accountNo=? 
+[DEBUG] 17:06:31.012 [main] - ==> Parameters: -500(Integer), 1(Integer) 
+[DEBUG] 17:06:31.013 [main] - <==    Updates: 1 
+[DEBUG] 17:06:31.016 [main] - Initiating transaction commit 
+
+直接提交 未发生回滚
+[DEBUG] 17:06:31.017 [main] - Committing JDBC transaction on Connection [HikariProxyConnection@2036704540 wrapping com.mysql.cj.jdbc.ConnectionImpl@3eee3e2b] 
+java.io.FileNotFoundException: aaa (系统找不到指定的文件。)
+```
+
+由于AOP切面中抓住了异常并进行了如下操作
+
+```java
+e.printStackTrace();
+return null;
+```
+
+因此外层事务切面不能捕获到异常，也就无法发生回滚。
+
 * 原因：事务切面优先级最低，但如果自定义的切面优先级和他一样，则还是自定义切面在内层，这时若自定义切面没有正确抛出异常…
 
 * 解法1、2：同情况2 中的解法:1、2
+
+  ```java
+  TransactionInterceptor.currentTransactionStatus().setRollbackOnly();
+  ```
+
+  上述catch块中的代码将在ThreadLocal中通知发生异常，因此最外层的事务切面也能正常获得异常信息。
+
 * 解法3：调整切面顺序，在 MyAspect 上添加 `@Order(Ordered.LOWEST_PRECEDENCE - 1)` （不推荐）
 
+  配置类中的
+
+  ```java
+  @EnableTransactionManagement
+  ```
+
+  决定了事务的优先级，源码如下
+
+  ```java
+  @Target({ElementType.TYPE})
+  @Retention(RetentionPolicy.RUNTIME)
+  @Documented
+  @Import({TransactionManagementConfigurationSelector.class})
+  public @interface EnableTransactionManagement {
+      boolean proxyTargetClass() default false;
+  
+      AdviceMode mode() default AdviceMode.PROXY;
+  
+      int order() default Integer.MAX_VALUE;
+  }
+  ```
+
+  由于为反编译版本，此处的`Integer.MAX_VALUE`实际上是常量`Ordered.LOWEST_PRECEDENCE`,即最低优先级(数字越大优先级越低)
 
 
-**4. 非 public 方法导致的事务失效**
+
+### 4.4 非 public 方法导致的事务失效
 
 ```java
 @Service
@@ -1314,10 +1521,28 @@ public class Service4 {
 }
 ```
 
+日志输出如下
+
+```java
+[INFO] 21:22:48.120 [main] - HikariPool-1 - Starting... 
+[INFO] 21:22:48.334 [main] - HikariPool-1 - Start completed. 
+[DEBUG] 21:22:48.417 [main] - ==>  Preparing: select balance from account where accountNo=? for update 
+[DEBUG] 21:22:48.442 [main] - ==> Parameters: 1(Integer) 
+[DEBUG] 21:22:48.483 [main] - <==      Total: 1 
+[DEBUG] 21:22:48.489 [main] - ==>  Preparing: update account set balance=balance+? where accountNo=? 
+[DEBUG] 21:22:48.489 [main] - ==> Parameters: -500(Integer), 1(Integer) 
+[DEBUG] 21:22:48.506 [main] - <==    Updates: 1 
+[DEBUG] 21:22:48.507 [main] - ==>  Preparing: update account set balance=balance+? where accountNo=? 
+[DEBUG] 21:22:48.507 [main] - ==> Parameters: 500(Integer), 2(Integer) 
+[DEBUG] 21:22:48.510 [main] - <==    Updates: 1 
+```
+
+没有有关事务的输出
+
 * 原因：Spring 为方法创建代理、添加事务通知、前提条件都是该方法是 public 的
 
 * 解法1：改为 public 方法
-* 解法2：添加 bean 配置如下（不推荐）
+* 解法2：在配置类中添加 bean 配置如下（不推荐）
 
 ```java
 @Bean
@@ -1328,7 +1553,7 @@ public TransactionAttributeSource transactionAttributeSource() {
 
 
 
-**5. 父子容器导致的事务失效**
+### 4.5 父子容器导致的事务失效
 
 ```java
 package day04.tx.app.service;
@@ -1371,7 +1596,9 @@ public class AccountController {
 }
 ```
 
-App 配置类
+该情况下日志输出不包含transactional的内容
+
+App 配置类 —— 父容器
 
 ```java
 @Configuration
@@ -1383,7 +1610,7 @@ public class AppConfig {
 }
 ```
 
-Web 配置类
+Web 配置类 —— 子容器
 
 ```java
 @Configuration
@@ -1396,32 +1623,67 @@ public class WebConfig {
 
 现在配置了父子容器，WebConfig 对应子容器，AppConfig 对应父容器，发现事务依然失效
 
+子容器并没有配置事务管理`@EnableTransactionManagement`，没有开启事务。
+
+又根据就近原则
+
+```java
+@Autowired
+public Service5 service;
+```
+
+注入的实际上是子容器的Service5.因此失去了事务控制。
+
 * 原因：子容器扫描范围过大，把未加事务配置的 service 扫描进来
 
-* 解法1：各扫描各的，不要图简便
+* 解法1：各扫描各的，不要图简便(配置扫描包的时候需要精确设置)
 
 * 解法2：不要用父子容器，所有 bean 放在同一容器
 
 
 
-**6. 调用本类方法导致传播行为失效**
+### 4.6 调用本类方法导致传播行为失效
 
 ```java
 @Service
 public class Service6 {
 
+    // Propagation.REQUIRED 默认传播行为 若没有事务则新建 若有事务则加入已有
+    // foo方法调用bar方法 我们期望foo和bar方法是两个事务
     @Transactional(propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
     public void foo() throws FileNotFoundException {
         LoggerUtils.get().debug("foo");
         bar();
     }
 
+    // Propagation.REQUIRES_NEW 无论是否已有事务都新建一个
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public void bar() throws FileNotFoundException {
         LoggerUtils.get().debug("bar");
     }
 }
 ```
+
+输出如下
+
+```java
+[INFO] 14:24:09.692 [main] - HikariPool-1 - Starting... 
+[INFO] 14:24:09.884 [main] - HikariPool-1 - Start completed. 
+-- foo方法的CGLIB代理
+class day04.tx.app.service.Service6$$EnhancerBySpringCGLIB$$de77784
+[DEBUG] 14:24:09.962 [main] - Creating new transaction with name [day04.tx.app.service.Service6.foo]: PROPAGATION_REQUIRED,ISOLATION_DEFAULT,-java.lang.Exception 
+[DEBUG] 14:24:09.962 [main] - Acquired Connection [HikariProxyConnection@293870357 wrapping com.mysql.cj.jdbc.ConnectionImpl@73877e19] for JDBC transaction 
+[DEBUG] 14:24:09.964 [main] - Switching JDBC Connection [HikariProxyConnection@293870357 wrapping com.mysql.cj.jdbc.ConnectionImpl@73877e19] to manual commit 
+[DEBUG] 14:24:09.970 [main] - foo 
+[DEBUG] 14:24:09.971 [main] - bar 
+[DEBUG] 14:24:09.971 [main] - Initiating transaction commit 
+[DEBUG] 14:24:09.971 [main] - Committing JDBC transaction on Connection [HikariProxyConnection@293870357 wrapping com.mysql.cj.jdbc.ConnectionImpl@73877e19] 
+[DEBUG] 14:24:09.971 [main] - Releasing JDBC Connection [HikariProxyConnection@293870357 wrapping com.mysql.cj.jdbc.ConnectionImpl@73877e19] after transaction 
+
+进程已结束,退出代码0
+```
+
+我们看到只开启了一个事务
 
 * 原因：本类方法调用不经过代理，因此无法增强
 
@@ -1431,14 +1693,14 @@ public class Service6 {
 
 * 解法3：通过 CTW，LTW 实现功能增强
 
-解法1
+解法1 循环依赖 不推荐
 
 ```java
 @Service
 public class Service6 {
 
 	@Autowired
-	private Service6 proxy; // 本质上是一种循环依赖
+	private Service6 proxy; // 本质上是一种循环依赖 不推荐
 
     @Transactional(propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
     public void foo() throws FileNotFoundException {
@@ -1473,9 +1735,36 @@ public class Service6 {
 }
 ```
 
+此时输出为
+
+```java
+[INFO] 14:31:59.752 [main] - HikariPool-1 - Starting... 
+[INFO] 14:31:59.976 [main] - HikariPool-1 - Start completed. 
+class day04.tx.app.service.Service6$$EnhancerBySpringCGLIB$$de77784
+[DEBUG] 14:32:00.071 [main] - Creating new transaction with name [day04.tx.app.service.Service6.foo]: PROPAGATION_REQUIRED,ISOLATION_DEFAULT,-java.lang.Exception 
+[DEBUG] 14:32:00.072 [main] - Acquired Connection [HikariProxyConnection@293870357 wrapping com.mysql.cj.jdbc.ConnectionImpl@73877e19] for JDBC transaction 
+[DEBUG] 14:32:00.074 [main] - Switching JDBC Connection [HikariProxyConnection@293870357 wrapping com.mysql.cj.jdbc.ConnectionImpl@73877e19] to manual commit 
+[DEBUG] 14:32:00.083 [main] - foo 
+[DEBUG] 14:32:00.083 [main] - Suspending current transaction, creating new transaction with name [day04.tx.app.service.Service6.bar] 
+[DEBUG] 14:32:00.087 [main] - Acquired Connection [HikariProxyConnection@1120072844 wrapping com.mysql.cj.jdbc.ConnectionImpl@3005db4a] for JDBC transaction 
+[DEBUG] 14:32:00.087 [main] - Switching JDBC Connection [HikariProxyConnection@1120072844 wrapping com.mysql.cj.jdbc.ConnectionImpl@3005db4a] to manual commit 
+[DEBUG] 14:32:00.088 [main] - bar 
+[DEBUG] 14:32:00.088 [main] - Initiating transaction commit 
+[DEBUG] 14:32:00.088 [main] - Committing JDBC transaction on Connection [HikariProxyConnection@1120072844 wrapping com.mysql.cj.jdbc.ConnectionImpl@3005db4a] 
+[DEBUG] 14:32:00.088 [main] - Releasing JDBC Connection [HikariProxyConnection@1120072844 wrapping com.mysql.cj.jdbc.ConnectionImpl@3005db4a] after transaction 
+[DEBUG] 14:32:00.089 [main] - Resuming suspended transaction after completion of inner transaction 
+[DEBUG] 14:32:00.089 [main] - Initiating transaction commit 
+[DEBUG] 14:32:00.089 [main] - Committing JDBC transaction on Connection [HikariProxyConnection@293870357 wrapping com.mysql.cj.jdbc.ConnectionImpl@73877e19] 
+[DEBUG] 14:32:00.089 [main] - Releasing JDBC Connection [HikariProxyConnection@293870357 wrapping com.mysql.cj.jdbc.ConnectionImpl@73877e19] after transaction 
+```
+
+可见两个事务均被正常执行
 
 
-**7. @Transactional 没有保证原子行为**
+
+### 4.7 @Transactional 没有保证原子行为
+
+原子性：即一个操作或者多个操作，要么全部执行并且执行的过程不会被任何因素打断，要么就都不执行
 
 ```java
 @Service
@@ -1506,15 +1795,15 @@ public class Service7 {
 
 * 原因：事务的原子性仅涵盖 insert、update、delete、select … for update 语句，select 方法并不阻塞
 
-<img src="D:\0_大学\2023.2\Java自学\Java面试专题-资料\day04-框架篇\讲义\img\image-20210903120436365.png" alt="image-20210903120436365" style="zoom: 50%;" />
+<img src="https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20210903120436365.png" alt="image-20210903120436365" style="zoom: 50%;" />
 
 * 如上图所示，红色线程和蓝色线程的查询都发生在扣减之前，都以为自己有足够的余额做扣减
 
 
 
-**8. @Transactional 方法导致的 synchronized 失效**
+### 4.8 补充: @Transactional 方法导致的 synchronized 失效
 
-针对上面的问题，能否在方法上加 synchronized 锁来解决呢？
+针对上面的问题（4.7），能否在方法上加 synchronized 锁来解决呢？
 
 ```java
 @Service
@@ -1543,14 +1832,35 @@ public class Service7 {
 
 答案是不行，原因如下：
 
-* synchronized 保证的仅是目标方法的原子性，环绕目标方法的还有 commit 等操作，它们并未处于 sync 块内
+* synchronized 保证的**仅是目标方法的原子性**，环绕目标方法的**还有 commit 等操作**，它们并**未处于 sync 块内**
 * 可以参考下图发现，蓝色线程的查询只要在红色线程提交之前执行，那么依然会查询到有 1000 足够余额来转账
 
 ![image-20210903120800185](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20210903120800185.png)
 
 * 解法1：synchronized 范围应扩大至代理方法调用
 
+  ```java
+  Object lock = new Object();
+  
+  CountDownLatch latch = new CountDownLatch(2);
+  new MyThread(() -> {
+      synchronized (lock) {
+          bean.transfer(1, 2, 1000);
+      }
+      latch.countDown();
+  }, "t1", "boldMagenta").start();
+  ```
+
+  取消`transfer(int from, int to, int amount)`方法上的sync，将其加在调用的
+
 * 解法2：使用 select … for update 替换 select
+
+  ```java
+  @Select("select balance from account where accountNo=#{accountNo} for update")
+  int findBalanceBy(int accountNo);
+  ```
+
+  再加上`for update`后可以在数据库层面保证操作原子性，是一种行级锁/排它锁，在数据库层面仅允许一个select操作。
 
 
 
@@ -1569,9 +1879,9 @@ public class Service7 {
 * 匹配阶段
 * 执行阶段
 
-**准备阶段**
+### 准备阶段
 
-1. 在 Web 容器第一次用到 DispatcherServlet 的时候，会创建其对象并执行 init 方法
+1. 在 Web 容器(tomcat/SpringBoot)第一次用到 DispatcherServlet 的时候，会创建其对象并执行 init 方法
 
 2. init 方法内会创建 Spring Web 容器，并调用容器 refresh 方法
 
@@ -1581,7 +1891,7 @@ public class Service7 {
 
 <img src="https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20210903140657163.png" alt="image-20210903140657163" style="zoom: 80%;" />
 
-**匹配阶段**
+### 匹配阶段
 
 1. 用户发送的请求统一到达前端控制器 DispatcherServlet
 
