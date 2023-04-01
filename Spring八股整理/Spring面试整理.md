@@ -1913,7 +1913,7 @@ public class Service7 {
 
 <img src="D:\0_大学\2023.2\Java自学\Java面试专题-资料\day04-框架篇\讲义\img\image-20210903141204799.png" alt="image-20210903141204799" style="zoom:80%;" />
 
-**调用阶段**
+### 调用阶段
 
 1. 执行拦截器 preHandle
 
@@ -1995,6 +1995,93 @@ public class Service7 {
 
 * @Configuration
 
+  ```java
+  public class TestConfiguration {
+      public static void main(String[] args) {
+          // 创建Spring容器
+          GenericApplicationContext context = new GenericApplicationContext();
+          // bean后工厂处理器 用于解析@Bean与@Configuration注解
+          AnnotationConfigUtils
+              .registerAnnotationConfigProcessors(context.getDefaultListableBeanFactory());
+          // 注册config
+          context.registerBean("myConfig", MyConfig.class);
+          // 调用refresh进行初始化操作
+          context.refresh();
+  //        System.out.println(context.getBean(MyConfig.class).getClass());
+      }
+  
+      @Configuration
+      @MapperScan("aaa")
+      // 注意点1: 配置类其实相当于一个工厂, 标注 @Bean 注解的方法相当于工厂方法
+      static class MyConfig {
+          // 注意点2: @Bean 不支持方法重载, 如果有多个重载方法, 仅有一个能入选为工厂方法
+          // 注意点3: @Configuration 默认会为标注的类生成代理, 其目的是保证 @Bean 方法相互调用时, 仍然能保证其单例特性
+          @Bean
+          public Bean1 bean1() {
+              System.out.println("bean1()");
+              System.out.println(bean2());
+              System.out.println(bean2());
+              System.out.println(bean2());
+              return new Bean1();
+          }
+  
+          @Bean
+          public Bean1 bean1(@Value("${java.class.version}") String a) {
+              System.out.println("bean1(" + a + ")");
+              return new Bean1();
+          }
+  
+  		// 如果有多个重载方法 参数越多方法优先级越高
+          @Bean
+          public Bean1 bean1(@Value("${java.class.version}") String a, @Value("${JAVA_HOME}") String b) {
+              System.out.println("bean1(" + a + ", " + b + ")");
+              return new Bean1();
+          }
+  
+          @Bean
+          public Bean2 bean2() {
+              System.out.println("bean2()");
+              return new Bean2();
+          }
+  
+          // 注意点4: @Configuration 中如果含有 BeanFactory 后处理器, 则实例工厂方法会导致 MyConfig 提前创建, 造成其依赖注入失败
+          // 解决方法是该用静态工厂方法或直接为 @Bean 的方法参数依赖注入, 针对 MapperScanner 可以改用注解方式
+          @Value("${java.class.version}")
+          private String version;
+  
+          // 这个bean后处理器是以成员方法的形式出现的 需要先有MyConfig对象才能创建扫描器
+          // 根据refresh流程 bean后处理器的创建在第五步invokeBeanFactoryPostProcessors
+          // 但是配置类应当在第十一步finishBeanFactoryInitialization被创建(进行bean的增强)
+          // 因此调用该方法是MyConfig并未被创建 因此无法正常执行依赖注入
+          // 修改方法 1. 将该方法改为static
+          @Bean
+          public static MapperScannerConfigurer configurer() {
+              MapperScannerConfigurer scanner = new MapperScannerConfigurer();
+              scanner.setBasePackage("aaa");
+              return scanner;
+          }
+  
+          @Bean
+          public Bean3 bean3() {
+              System.out.println("bean3() " + version);
+              return new Bean3();
+          }
+      }
+  
+      static class Bean1 {
+  
+      }
+  
+      static class Bean2 {
+  
+      }
+  
+      static class Bean3 {
+  
+      }
+  }
+  ```
+
   * 配置类其实相当于一个工厂, 标注 @Bean 注解的方法相当于工厂方法
   * @Bean 不支持方法重载, 如果有多个重载方法, 仅有一个能入选为工厂方法
   * @Configuration 默认会为标注的类生成代理, 其目的是保证 @Bean 方法相互调用时, 仍然能保证其单例特性
@@ -2003,6 +2090,78 @@ public class Service7 {
 * @Bean
 
 * @Import 
+
+  ```java
+  public class TestDeferredImport {
+  
+      public static void main(String[] args) {
+          GenericApplicationContext context = new GenericApplicationContext();
+          DefaultListableBeanFactory beanFactory = context.getDefaultListableBeanFactory();
+          beanFactory.setAllowBeanDefinitionOverriding(false); // 不允许同名定义覆盖
+          AnnotationConfigUtils.registerAnnotationConfigProcessors(beanFactory);
+          context.registerBean(MyConfig.class);
+          context.refresh();
+  
+          System.out.println(context.getBean(MyBean.class));
+      }
+  
+      // 1. 同一配置类中, @Import 先解析  @Bean 后解析
+      // 2. 同名定义, 默认后面解析的会覆盖前面解析的
+      // 3. 不允许覆盖的情况下, 如何能够让 MyConfig(主配置类) 的配置优先? (虽然覆盖方式能解决)
+      // 4. DeferredImportSelector 最后工作, 可以简单认为先解析 @Bean, 再 Import
+      @Configuration
+      // @Import(Bean1.class) // 1. 引入单个bean
+      // @Import(OtherConfig.class) // 2. 引入一个配置类 会将配置类以及配置类中的bean都注入到容器中
+      @Import(MySelector.class) // 3. 通过selector引入多个类
+      // @Import(MyRegistry.class) // 4. 通过beanDefinition注册器 注册bean加入容器
+      static class MyConfig { // 主配置 - 程序员编写的
+          @Bean
+          public MyBean myBean() {
+              return new Bean1();
+          }
+      }
+  
+      static class MySelector implements DeferredImportSelector {
+  
+          @Override
+          public String[] selectImports(AnnotationMetadata importingClassMetadata) {
+              return new String[]{OtherConfig.class.getName()};
+          }
+      }
+      
+      static class MyRegister implements ImportBeanDefinitionRegistrar {
+  
+          @Override
+          public void registerBeanDefinitions(
+              AnnotationMetadata importingClassMetadata, 
+              BeanDefinitionRegistry registry) {
+              registry.registerBeanDefinition("myBean", new RootBeanDefinition(Bean2.class));
+          }
+      }
+  
+      @Configuration
+      static class OtherConfig { // 从属配置 - 自动配置
+          @Bean
+          @ConditionalOnMissingBean
+          public MyBean myBean() {
+              return new Bean2();
+          }
+      }
+  
+      interface MyBean {
+  
+      }
+  
+      static class Bean1 implements MyBean {
+  
+      }
+  
+      static class Bean2 implements MyBean {
+  
+      }
+  
+  }
+  ```
 
   * 四种用法
 
@@ -2060,8 +2219,13 @@ public class Service7 {
 **boot auto**
 
 * @SpringBootApplication
+  * @SpringBootConfiguration
+  * @EnableAutoConfiguration
+
 * @EnableAutoConfiguration
-* @SpringBootConfiguration
+* @SpringBootConfiguration 整个程序只能有一个被标注@SpringBootConfiguration的类
+  * @Configuration
+
 
 **boot condition**
 
@@ -2084,7 +2248,7 @@ public class Service7 {
 
 * 掌握 SpringBoot 自动配置原理
 
-**自动配置原理**
+### 自动配置原理
 
 @SpringBootConfiguration 是一个组合注解，由 @ComponentScan、@EnableAutoConfiguration 和 @SpringBootConfiguration 组成
 
@@ -2096,7 +2260,7 @@ public class Service7 {
    * @AutoConfigurationPackage – 用来记住扫描的起始包
    * @Import(AutoConfigurationImportSelector.class) 用来加载 `META-INF/spring.factories` 中的自动配置类
 
-**为什么不使用 @Import 直接引入自动配置类**
+### 为什么不使用 @Import 直接引入自动配置类
 
 有两个原因：
 
@@ -2116,12 +2280,12 @@ public class Service7 {
 
 * 掌握 Spring 中常见的设计模式
 
-**1. Spring 中的 Singleton**
+### 8.1 Spring 中的 Singleton
 
 请大家区分 singleton pattern 与 Spring 中的 singleton bean
 
 * 根据单例模式的目的 *Ensure a class only has one instance, and provide a global point of access to it* 
-* 显然 Spring 中的 singleton bean 并非实现了单例模式，singleton bean 只能保证每个容器内，相同 id 的 bean 单实例
+* 显然 Spring 中的 singleton bean 并非实现了单例模式，**singleton bean 只能保证每个容器内，相同 id 的 bean 单实例**
 * 当然 Spring 中也用到了单例模式，例如
   * org.springframework.transaction.TransactionDefinition#withDefaults
   * org.springframework.aop.TruePointcut#INSTANCE
@@ -2129,7 +2293,7 @@ public class Service7 {
   * org.springframework.core.annotation.AnnotationAwareOrderComparator#INSTANCE
   * org.springframework.core.OrderComparator#INSTANCE
 
-**2. Spring 中的 Builder**
+### 8.2 Spring 中的 Builder
 
 定义 *Separate the construction of a complex object from its representation so that the same construction process can create different representations* 
 
@@ -2151,7 +2315,7 @@ Spring 中体现 Builder 模式的地方：
 
 * org.springframework.http.ResponseEntity.BodyBuilder
 
-**3. Spring 中的 Factory Method**
+### 8.3 Spring 中的 Factory Method
 
 定义 *Define an interface for creating an object, but let subclasses decide which class to instantiate. Factory Method lets a class defer instantiation to subclasses* 
 
@@ -2167,7 +2331,7 @@ Spring 中其它工厂：
 
 前两种工厂主要封装第三方的 bean 的创建过程，后两种工厂可以推迟 bean 创建，解决循环依赖及单例注入多例等问题
 
-**4. Spring 中的 Adapter**
+### 8.4 Spring 中的 Adapter
 
 定义 *Convert the interface of a class into another interface clients expect. Adapter lets classes work together that couldn't otherwise because of incompatible interfaces* 
 
@@ -2180,7 +2344,7 @@ Spring 中其它工厂：
   * 它们的处理方法都不一样，为了统一调用，必须适配为 HandlerAdapter 接口
 * org.springframework.beans.factory.support.DisposableBeanAdapter – 因为销毁方法多种多样，因此都要适配为 DisposableBean 来统一调用销毁方法 
 
-**5. Spring 中的 Composite**
+### 8.5 Spring 中的 Composite
 
 定义 *Compose objects into tree structures to represent part-whole hierarchies. Composite lets clients treat individual objects and compositions of objects uniformly* 
 
@@ -2193,7 +2357,7 @@ Spring 中其它工厂：
 
 composite 对象的作用是，将分散的调用集中起来，统一调用入口，它的特征是，与具体干活的实现实现同一个接口，当调用 composite 对象的接口方法时，其实是委托具体干活的实现来完成
 
-**6. Spring 中的 Decorator**
+### 8.6 Spring 中的 Decorator
 
 定义 *Attach additional responsibilities to an object dynamically. Decorators provide a flexible alternative to subclassing for extending functionality* 
 
@@ -2201,7 +2365,7 @@ composite 对象的作用是，将分散的调用集中起来，统一调用入�
 
 * org.springframework.web.util.ContentCachingRequestWrapper
 
-**7. Spring 中的 Proxy**
+### 8.7 Spring 中的 Proxy
 
 定义 *Provide a surrogate or placeholder for another object to control access to it* 
 
@@ -2212,7 +2376,7 @@ composite 对象的作用是，将分散的调用集中起来，统一调用入�
 * org.springframework.aop.framework.JdkDynamicAopProxy
 * org.springframework.aop.framework.ObjenesisCglibAopProxy
 
-**8. Spring 中的 Chain of Responsibility**
+### 8.8 Spring 中的 Chain of Responsibility
 
 定义 *Avoid coupling the sender of a request to its receiver by giving more than one object a chance to handle the request. Chain the receiving objects and pass the request along the chain until an object handles it* 
 
@@ -2220,7 +2384,7 @@ composite 对象的作用是，将分散的调用集中起来，统一调用入�
 
 * org.springframework.web.servlet.HandlerInterceptor
 
-**9. Spring 中的 Observer**
+### 8.9 Spring 中的 Observer
 
 定义 *Define a one-to-many dependency between objects so that when one object changes state, all its dependents are notified and updated automatically* 
 
@@ -2230,7 +2394,7 @@ composite 对象的作用是，将分散的调用集中起来，统一调用入�
 * org.springframework.context.event.ApplicationEventMulticaster
 * org.springframework.context.ApplicationEvent
 
-**10. Spring 中的 Strategy**
+### 8.10 Spring 中的 Strategy
 
 定义 *Define a family of algorithms, encapsulate each one, and make them interchangeable. Strategy lets the algorithm vary independently from clients that use it* 
 
@@ -2240,7 +2404,7 @@ composite 对象的作用是，将分散的调用集中起来，统一调用入�
 * org.springframework.core.annotation.MergedAnnotations.SearchStrategy
 * org.springframework.boot.autoconfigure.condition.SearchStrategy
 
-**11. Spring 中的 Template Method**
+### 8.11 Spring 中的 Template Method
 
 定义 *Define the skeleton of an algorithm in an operation, deferring some steps to subclasses. Template Method lets subclasses redefine certain steps of an algorithm without changing the algorithm's structure* 
 
@@ -2248,3 +2412,14 @@ composite 对象的作用是，将分散的调用集中起来，统一调用入�
 
 * 大部分以 Template 命名的类，如 JdbcTemplate，TransactionTemplate
 * 很多以 Abstract 命名的类，如 AbstractApplicationContext
+
+
+
+## 9. 循环依赖
+
+**要求**
+
+* 要完全理解循环依赖，需要理解代理对象的创建时机
+* 掌握ProxyFactory创建代理的过程，理解Advisor，Advice，PointCut与Aspect
+* 掌握AnnotationAwareAspectJAutoProxyCreater筛选Advisor合格者并创建代理的过程
+
