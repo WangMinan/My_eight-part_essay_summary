@@ -2417,9 +2417,817 @@ composite 对象的作用是，将分散的调用集中起来，统一调用入�
 
 ## 9. 循环依赖
 
+
+
+### 9.1 铺垫——复习AOP与代理
+
 **要求**
 
 * 要完全理解循环依赖，需要理解代理对象的创建时机
 * 掌握ProxyFactory创建代理的过程，理解Advisor，Advice，PointCut与Aspect
 * 掌握AnnotationAwareAspectJAutoProxyCreater筛选Advisor合格者并创建代理的过程
+
+我们有一个接口和他的实现
+
+
+
+#### 9.1.1 ProxyFactory手动创建
+
+接下来的讨论都将基于这个基础
+
+```java
+interface I1{
+        void foo();
+        void bar();
+    }
+
+static class Target1 implements I1{
+
+    @Override
+    public void foo() {
+        System.out.println("Target1.foo");
+    }
+
+    @Override
+    public void bar() {
+        System.out.println("Target1.bar");
+    }
+}
+```
+
+##### 9.1.1.1 Advisor
+
+示例代码如下
+
+```java
+public static void main(String[] args) {
+    // aspect = 通知(advice) + 切点(pointcut) 一个切面类中可能有一个或多个通知方法
+    // advice = 前置通知(before) + 后置通知(after) 
+    // 				+ 环绕通知(around) + 异常通知(afterThrowing) + 最终通知(afterReturning)
+    // advisor = advice + pointcut 更细粒度的切面, 只包含一个通知和一个切点
+    ProxyFactory proxyFactory = new ProxyFactory();
+    // 设定目标对象
+    proxyFactory.setTarget(new Target1()); // 代理 -> targetSource -> target
+    /*proxyFactory.addAdvice(new MethodInterceptor() {
+        @Override
+        public Object invoke(MethodInvocation invocation) throws Throwable {
+            System.out.println("MethodInterceptor.invoke");
+            return invocation.proceed();
+        }
+    });*/
+    // 上下两种表达是一样的
+    // methodInterceptor实现了环绕通知
+    proxyFactory.addAdvice((MethodInterceptor) invocation -> {
+        try {
+            System.out.println("Before MethodInterceptor.invoke"); // 前置通知
+            return invocation.proceed(); // 调用目标对象的方法
+        } finally {
+            System.out.println("After MethodInterceptor.invoke"); // 后置通知
+        }
+    });
+    // 创建代理对象 默认生成的是target1的子类 需要强转
+    Target1 proxy = (Target1) proxyFactory.getProxy();
+    proxy.foo();
+    proxy.bar();
+}
+```
+
+实现了通知，输出如下
+
+```java
+Before MethodInterceptor.invoke
+Target1.foo
+After MethodInterceptor.invoke
+Before MethodInterceptor.invoke
+Target1.bar
+After MethodInterceptor.invoke
+```
+
+##### 9.1.1.2 PointCut
+
+代码如下
+
+```java
+public static void main(String[] args) {
+    // aspect = 通知(advice) + 切点(pointcut) 一个切面类中可能有一个或多个通知方法
+    // advice = 前置通知(before) + 后置通知(after) 
+    // 			+ 环绕通知(around) + 异常通知(afterThrowing) + 最终通知(afterReturning)
+    // advisor = advice + pointcut 更细粒度的切面, 只包含一个通知和一个切点
+    ProxyFactory proxyFactory = new ProxyFactory();
+    // 设定目标对象
+    proxyFactory.setTarget(new Target1()); // 代理 -> targetSource -> target
+    
+	// 引入切点
+    AspectJExpressionPointcut pointcut = new AspectJExpressionPointcut();
+    pointcut.setExpression("execution(* foo(..)) || execution(* bar(..)))");
+	
+    // 设置advisor
+    proxyFactory.addAdvisor(new DefaultPointcutAdvisor(pointcut, (MethodInterceptor) invocation -> {
+        try {
+            System.out.println("Advisor Before MethodInterceptor.invoke"); // 前置通知
+            return invocation.proceed(); // 调用目标对象的方法
+        } finally {
+            System.out.println("Advisor After MethodInterceptor.invoke"); // 后置通知
+        }
+    }));
+
+    // 创建代理对象 默认生成的是target1的子类 需要强转
+    Target1 proxy = (Target1) proxyFactory.getProxy();
+    System.out.println(proxy.getClass());
+    proxy.foo();
+    proxy.bar();
+}
+```
+
+输出如下
+
+```java
+class day04.circularDependency.App64_2$Target1$$EnhancerBySpringCGLIB$$4bc3854d
+Advisor Before MethodInterceptor.invoke
+Target1.foo
+Advisor After MethodInterceptor.invoke
+Advisor Before MethodInterceptor.invoke
+Target1.bar
+Advisor After MethodInterceptor.invoke
+```
+
+代理的命名方式为父类(父方法) + 代理类型 + uuid
+
+如果要使用jdk代理，则需要在获取代理之前指定接口名称。
+
+```java
+// 如果要使用jdk代理 jdk代理只能代理接口
+proxyFactory.addInterface(I1.class);
+```
+
+同时在创建代理时需要改变赋值语句，通过接口生成的代理对象与原始类是平级兄弟关系，不可进行类型强转。
+
+如果不更改赋值语句则输出异常如下
+
+```java
+Exception in thread "main" java.lang.ClassCastException: 
+class day04.circularDependency.$Proxy2 cannot be cast to class day04.circularDependency.App64_2$Target1 (day04.circularDependency.$Proxy2 and day04.circularDependency.App64_2$Target1 are in unnamed module of loader 'app')
+	at day04.circularDependency.App64_2.main(App64_2.java:56)
+
+```
+
+应当将创建代理对象的语句改为
+
+```java
+I1 proxy = (I1) proxyFactory.getProxy();
+```
+
+则此时输出如下所示
+
+```java
+class day04.circularDependency.$Proxy2
+Advisor Before MethodInterceptor.invoke
+Target1.foo
+Advisor After MethodInterceptor.invoke
+Advisor Before MethodInterceptor.invoke
+Target1.bar
+Advisor After MethodInterceptor.invoke
+```
+
+`$Proxy2`这样的命名符合jdk代理的特征
+
+要是的上面这种表达的代理形式变回CGLIB，则可以新增如下语句
+
+```java
+// 如果要使用jdk代理 jdk代理只能代理接口
+proxyFactory.addInterface(I1.class);
+// 在上面这个语句后增加
+proxyFactory.setProxyTargetClass(true);
+```
+
+此时输出又回到了CGLIB代理模式
+
+```
+class day04.circularDependency.App64_2$Target1$$EnhancerBySpringCGLIB$$a95dc087
+```
+
+
+
+#### 9.1.2 使用注解进行开发
+
+我们接下来的讨论将基于新的类与环绕
+
+```java
+static class Target1{
+    public void foo(){
+        System.out.println("Target1.foo");
+    }
+}
+
+static class Target2{
+    public void bar(){
+        System.out.println("Target2.bar");
+    }
+}
+
+@Aspect
+static class Aspect1{
+    @Around("execution(* foo(..))") // 一个advisor切面
+    public Object around(ProceedingJoinPoint pjp) throws Throwable {
+        try {
+            System.out.println("Aspect1.around.before");
+            return pjp.proceed();
+        } finally {
+            System.out.println("Aspect1.around.after");
+        }
+    }
+}
+
+@Aspect
+static class Aspect2{
+    @Before("execution(* foo(..))") // 一个advisor切面
+    public void before(){
+        System.out.println("Aspect2.before");
+    }
+    @After("execution(* foo(..))") // 一个advisor切面
+    public void after(){
+        System.out.println("Aspect2.after");
+    }
+}
+
+@Aspect
+static class Aspect3{
+    @Before("execution(* bar(..))") // 一个advisor切面
+    public void before(){
+        System.out.println("Aspect3.before");
+    }
+}
+```
+
+在此基础上进行调用，主函数如下
+
+```java
+public static void main(String[] args) {
+    GenericApplicationContext context = new GenericApplicationContext();
+    context.registerBean("aspect1", Aspect1.class);
+    context.registerBean("aspect2", Aspect2.class);
+    context.registerBean("aspect3", Aspect3.class);
+    // 会自动注册一个beanPostProcessor 自动代理后处理器
+    context.registerBean(AnnotationAwareAspectJAutoProxyCreator.class);
+    context.registerBean("target1", Target1.class);
+    context.registerBean("target2", Target2.class);
+    context.refresh();
+
+    Target1 target1 = context.getBean("target1", Target1.class);
+    Target2 target2 = context.getBean("target2", Target2.class);
+
+    target1.foo();
+    System.out.println("==================================");
+    target2.bar();
+}
+```
+
+输出如下
+
+```java
+Aspect1.around.before
+Aspect2.before
+Target1.foo
+Aspect2.after
+Aspect1.around.after
+==================================
+Aspect3.before
+Target2.bar
+```
+
+Advice类型的切面最终都被转换为Advisor
+
+**总结**
+
++ 最基本的切面是Advisor，一个Advice对应一个或多个Advisor
++ 最基本的Advice是MethodInterceptor，其他Advice最终都被适配为MethodInterceptor
++ 创建代理的方式
+  + 目标对象实现了用户自定义的接口——使用JDK代理
+  + 如果没有实现用户自定义接口——采用CGLIB代理
++ 切面、切点、通知等不会被代理
++ AnnotationAwareAspectJAutoProxyCreator调用时机: 创建阶段、依赖注入阶段、**初始化阶段**
+
+
+
+### 9.2 三级缓存模型
+
+#### 9.2.1 一级缓存模型
+
+**原理**
+
+<img src="https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230402201616372.png" alt="image-20230402201616372" style="zoom:80%;" />
+
+**缺陷: 一级缓存不能解决循环依赖**
+
+<img src="https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230402202002788.png" alt="image-20230402202002788" style="zoom:80%;" />
+
+
+
+#### 9.2.2 二级缓存模型
+
+**实现**
+
+<img src="https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230402204044164.png" alt="image-20230402204044164" style="zoom:80%;" />
+
+在新建对象时，会创建一个半成品实例放入singletonFactory中。当初始化全部完成后该半成品实例被更新为完全实例，移动到singletonObjects中。
+
+**缺陷: 二级缓存不能实现依赖中有代理的情况**
+
+<img src="https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230402205629615.png" alt="image-20230402205629615" style="zoom:80%;" />
+
+B执行依赖注入时，希望注入的是一个A的代理对象，但实际上从二级缓存中注入的是A的半成品而不是最终的成品对象。因此在业务中B用到A时使用的A对象没有获得增强。
+
+#### 9.2.3 三级缓存模型
+
+需要引入一个工厂，用于判断是否需要做代理，从而决定返回实例的时机。
+
+![image-20230402211353182](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230402211353182.png)
+
+#### 9.2.4 一个案例
+
+**源代码如下所示**
+
+```java
+public class App60 {
+    static class A{
+        private static final Logger log = LoggerFactory.getLogger(A.class);
+        private B b;
+
+        public A(){
+            log.info("A.constructor");
+        }
+
+        @Autowired // 预编译会报错 但不影响实际编译运行
+        public void setB(B b) {
+            log.info("setB({})", b);
+            this.b = b;
+        }
+
+        @PostConstruct
+        public void init(){
+            log.info("A.init");
+        }
+    }
+
+    static class B{
+        private static final Logger log = LoggerFactory.getLogger(B.class);
+        private A a;
+
+        public B(){
+            log.info("B.constructor");
+        }
+
+        @Autowired
+        public void setA(A a) {
+            log.info("setA({})", a);
+            this.a = a;
+        }
+
+        @PostConstruct
+        public void init(){
+            log.info("B.init");
+        }
+    }
+
+    public static void main(String[] args) {
+        GenericApplicationContext context = new GenericApplicationContext();
+        context.registerBean("a", A.class);
+        context.registerBean("b", B.class);
+        // 注册bean后处理器来启用Autowired注解
+        AnnotationConfigUtils.registerAnnotationConfigProcessors(context.getDefaultListableBeanFactory());
+        context.refresh();
+    }
+}
+```
+
+**输出如下**
+
+```java
+[INFO] 21:29:19.647 [main] - A.constructor 
+[INFO] 21:29:19.740 [main] - B.constructor 
+[INFO] 21:29:19.746 [main] - setA(day04.circularDependency.App60$A@1e04fa0a) 
+[INFO] 21:29:19.748 [main] - B.init 
+[INFO] 21:29:19.748 [main] - setB(day04.circularDependency.App60$B@58695725) 
+[INFO] 21:29:19.748 [main] - A.init 
+```
+
+并没有报错，说明这个循环依赖已经被Spring解决了。执行流程为先创建A对象，在执行A的依赖注入时发现需要B对象，因此进入B来构造B的实例。B的依赖注入中调用了对A对象的依赖，A对象的依赖已经在三级缓存中，因此可以完成B的初始化。在创建完B的实例后回到A。完成A的初始化。
+
+**通过Debug进一步验证**
+
+##### 第一次停止
+
+断点1选在`doGetBean`上，给出的最后一行的位置
+
+```java
+protected <T> T doGetBean(
+			String name, @Nullable Class<T> requiredType, @Nullable Object[] args, boolean typeCheckOnly)
+			throws BeansException {
+
+    String beanName = transformedBeanName(name);
+    Object beanInstance;
+
+    // Eagerly check singleton cache for manually registered singletons.
+    Object sharedInstance = getSingleton(beanName);
+    ...
+}
+```
+
+`getSingleton()`用于从缓存中获取对象。断点条件如下设置
+
+<img src="https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230402213838917.png" alt="image-20230402213838917" style="zoom:50%;" />
+
+断点2选在第五阶段`doCreateBean`上，同样是`getSingleton()`方法上。当发生循环依赖(`earlySingletonExposure`)时下面的方法被调用。
+
+```java
+if (earlySingletonExposure) {
+    Object earlySingletonReference = getSingleton(beanName, false);
+    if (earlySingletonReference != null) {
+        if (exposedObject == bean) {
+            exposedObject = earlySingletonReference;
+        }
+    ...
+    }
+    ...
+}
+```
+
+设置断点条件是一致的。
+
+开启调试后停在断点1位置。处于A初始化阶段，没有发生循环依赖。放行断点并继续运行。
+
+##### 第二次停止
+
+第二次停在断点1位置，查看调用链。
+
+![image-20230402214615874](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230402214615874.png)
+
+A的`populateBean`负责执行依赖注入。发现A中需要setB。
+
+创建B
+
+![image-20230402214745754](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230402214745754.png)
+
+这样就执行到了B的`populateBean`
+
+![image-20230402214917074](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230402214917074.png)
+
+需要使用A来创建B，这样就有了第三次`getBean`，这时get的对象又变成了A
+
+![image-20230402215031554](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230402215031554.png)
+
+这时就进入了断点1位置的`getSingleton()`方法，即到三级缓存中寻找是否存在A对象
+
+此时二级缓存earlySingletonObject中没有内容(没有调用三级缓存中的工厂对象生产产品，工厂产品在二级缓存)
+
+三级缓存singletonFactories中有内容，是A初始化之前创建的工厂对象
+
+写入过程在`AbstractAutowireCapableBeanFactory`中
+
+下列代码即为向三级缓存中写入内容
+
+```java
+boolean earlySingletonExposure = (mbd.isSingleton() && this.allowCircularReferences &&
+				isSingletonCurrentlyInCreation(beanName));
+    if (earlySingletonExposure) {
+        if (logger.isTraceEnabled()) {
+            logger.trace("Eagerly caching bean '" + beanName +
+                    "' to allow for resolving potential circular references");
+        }
+        // 以beanName作为key, beanFactory作为值存入三级缓存
+        addSingletonFactory(beanName, () -> getEarlyBeanReference(beanName, mbd, bean));
+    }
+	...
+}
+```
+
+可以看出三级缓存中有两个元素bfA与bfB.与我们的推测是一致的
+
+![image-20230402220526130](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230402220526130.png)
+
+点击继续来到下一个断点
+
+##### 第三次停止
+
+逐级缓存寻找
+
+![image-20230402220957128](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230402220957128.png)
+
+加锁后重新查找是为了保证多线程下的线程安全。
+
+![image-20230402221208739](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230402221208739.png)
+
+使用工厂生产产品对象，将产品对象放入二级缓存中，同时将工厂对象从三级缓存中移除。
+
+继续执行
+
+##### 第四次停止
+
+B已经出现在了成品缓存中，并完成了A对象的注入。
+
+![image-20230402221829487](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230402221829487.png)
+
+
+
+#### 9.2.5 继续案例\_二级缓存的作用
+
+继续运行，来到第二个断点的位置。大部分的流程都走完了。
+
+![image-20230402222215020](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230402222215020.png)
+
+B已经出现在一级缓存(成品对象)中。A的注入完成了。
+
+该断点位置的代码是为了防止遗漏一个二级缓存的代理对象。
+
+接下来判断bean与expose的关系
+
+```java
+if (earlySingletonReference != null) {
+    if (exposedObject == bean) {
+        exposedObject = earlySingletonReference;
+    }
+    else if (!this.allowRawInjectionDespiteWrapping && hasDependentBean(beanName)) {
+        String[] dependentBeans = getDependentBeans(beanName);
+        Set<String> actualDependentBeans = new LinkedHashSet<>(dependentBeans.length);
+        for (String dependentBean : dependentBeans) {
+            if (!removeSingletonIfCreatedForTypeCheckOnly(dependentBean)) {
+                actualDependentBeans.add(dependentBean);
+            }
+        }
+        if (!actualDependentBeans.isEmpty()) {
+            throw new BeanCurrentlyInCreationException(beanName,
+                    "Bean with name '" + beanName + "' has been injected into other beans [" +
+                    StringUtils.collectionToCommaDelimitedString(actualDependentBeans) +
+                    "] in its raw version as part of a circular reference, but has eventually been " +
+                    "wrapped. This means that said other beans do not use the final version of the " +
+                    "bean. This is often the result of over-eager type matching - consider using " +
+                    "'getBeanNamesForType' with the 'allowEagerInit' flag turned off, for example.");
+        }
+    }
+}
+```
+
+如下图所示
+
+![image-20230403104256973](https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230403104256973.png)
+
+
+
+### 9.3 自动代理后处理器与循环依赖的关系
+
+关于`AnnotationAwareAspectJAutoProxyCreator`，有两个方法与建立代理有关。
+
++ `getEarlyBeanReference`
+
+  该方法在类`AbstractAutoProxyCreator`中，是对`SmartInstantiationAwareBeanPostProcessor`接口中该方法的具体实现。代码如下所示：
+
+  ```java
+  @Override
+  public Object getEarlyBeanReference(Object bean, String beanName) {
+      Object cacheKey = getCacheKey(bean.getClass(), beanName);
+      this.earlyProxyReferences.put(cacheKey, bean);
+      return wrapIfNecessary(bean, beanName, cacheKey);
+  }
+  ```
+
+  三级缓存中的工厂对象会间接调用上述方法，上述方法通过`wrapIfNecessary`来(提前)创建代理。
+
++ `postProcessAfterInitialization`
+
+  该类也在类`AbstractAutoProxyCreator`中，源码如下
+
+  ```java
+  @Override
+  public Object postProcessAfterInitialization(@Nullable Object bean, String beanName) {
+      if (bean != null) {
+          Object cacheKey = getCacheKey(bean.getClass(), beanName);
+          if (this.earlyProxyReferences.remove(cacheKey) != bean) {
+              return wrapIfNecessary(bean, beanName, cacheKey);
+          }
+      }
+      return bean;
+  }
+  ```
+
+  在完成初始化后创建代理。
+
+避免重复创建代理主要通过`earlyProxyReferences`
+
+```java
+private final Map<Object, Object> earlyProxyReferences = new ConcurrentHashMap<>(16);
+```
+
+如果提前创建代理，则`getEarlyBeanReference`向该map中写入bean的名字和值。`postProcessAfterInitialization`发现后直接跳过创建并将此key-value对从map中移除。
+
+
+
+### 9.4 构造中的循环依赖
+
+我们看到Set中的循环依赖可以通过三级缓存模型解决。接下来继续分析构造中出现的循环依赖。样例如下图所示：
+
+<img src="https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230403120130177.png" alt="image-20230403120130177" style="zoom: 67%;" />
+
+**解决思路**
+
+在A创建时尽量推迟真的B对象的获取，先给A一个假的B对象或者B的工厂。允许A先把流程走完。
+
+<img src="https://cdn.jsdelivr.net/gh/WangMinan/Pics/image-20230403144007040.png" alt="image-20230403144007040" style="zoom: 67%;" />
+
+#### 9.4.1 `@Lazy`
+
+第一种方法是在注入时使用`@Lazy`注解
+
+` @Lazy`可以加在成员变量或方法参数上。Spring依据此注解查找依赖注入的值。
+
+查找依赖注入对的值时用到`DefaultListableBeanFactory`中名为`ResolveDepenency`的方法，会根据成员变量会参数类型来决定是否包装成其他类型
+
+```java
+@Override
+@Nullable
+public Object resolveDependency(DependencyDescriptor descriptor, @Nullable String requestingBeanName,
+        @Nullable Set<String> autowiredBeanNames, @Nullable TypeConverter typeConverter) throws BeansException {
+
+    descriptor.initParameterNameDiscovery(getParameterNameDiscoverer());
+    if (Optional.class == descriptor.getDependencyType()) {
+        return createOptionalDependency(descriptor, requestingBeanName);
+    }
+    else if (ObjectFactory.class == descriptor.getDependencyType() ||
+            ObjectProvider.class == descriptor.getDependencyType()) {
+        return new DependencyObjectProvider(descriptor, requestingBeanName);
+    }
+    else if (javaxInjectProviderClass == descriptor.getDependencyType()) {
+        return new Jsr330Factory().createDependencyProvider(descriptor, requestingBeanName);
+    }
+    else {
+        Object result = getAutowireCandidateResolver().getLazyResolutionProxyIfNecessary(
+                descriptor, requestingBeanName);
+        if (result == null) {
+            result = doResolveDependency(descriptor, requestingBeanName, autowiredBeanNames, typeConverter);
+        }
+        return result;
+    }
+}
+```
+
+如果加上了`@Lazy`则该方法中`getLazyResolutionProxyIfNecessary`会创建一个代理对象，否则直接返回原始对象。
+
+`getLazyResolutionProxyIfNecessary`的实现在`ContextAnnotationAutowireCandidateResolver`中，源码如下
+
+```java
+@Override
+@Nullable
+public Object getLazyResolutionProxyIfNecessary(DependencyDescriptor descriptor, @Nullable String beanName) {
+    return (isLazy(descriptor) ? buildLazyResolutionProxy(descriptor, beanName) : null);
+}
+```
+
+其中的`buildLazyResolutionProxy`方法用于构建代理
+
+```java
+protected Object buildLazyResolutionProxy(final DependencyDescriptor descriptor, final @Nullable String beanName) {
+    BeanFactory beanFactory = getBeanFactory();
+    Assert.state(beanFactory instanceof DefaultListableBeanFactory,
+            "BeanFactory needs to be a DefaultListableBeanFactory");
+    final DefaultListableBeanFactory dlbf = (DefaultListableBeanFactory) beanFactory;
+
+    TargetSource ts = new TargetSource() {
+        @Override
+        public Class<?> getTargetClass() {
+            return descriptor.getDependencyType();
+        }
+        @Override
+        public boolean isStatic() {
+            return false;
+        }
+        // 没有直接关联目标
+        @Override
+        public Object getTarget() {
+            Set<String> autowiredBeanNames = (beanName != null ? new LinkedHashSet<>(1) : null);
+            // 用bean工厂间接获取target
+            Object target = dlbf.doResolveDependency(descriptor, beanName, autowiredBeanNames, null);
+            if (target == null) {
+                Class<?> type = getTargetClass();
+                if (Map.class == type) {
+                    return Collections.emptyMap();
+                }
+                else if (List.class == type) {
+                    return Collections.emptyList();
+                }
+                else if (Set.class == type || Collection.class == type) {
+                    return Collections.emptySet();
+                }
+                throw new NoSuchBeanDefinitionException(descriptor.getResolvableType(),
+                        "Optional dependency not present for lazy injection point");
+            }
+            if (autowiredBeanNames != null) {
+                for (String autowiredBeanName : autowiredBeanNames) {
+                    if (dlbf.containsBean(autowiredBeanName)) {
+                        dlbf.registerDependentBean(autowiredBeanName, beanName);
+                    }
+                }
+            }
+            return target;
+        }
+        @Override
+        public void releaseTarget(Object target) {
+        }
+    };
+
+    ProxyFactory pf = new ProxyFactory();
+    pf.setTargetSource(ts);
+    Class<?> dependencyType = descriptor.getDependencyType();
+    if (dependencyType.isInterface()) {
+        pf.addInterface(dependencyType);
+    }
+    return pf.getProxy(dlbf.getBeanClassLoader());
+}
+```
+
+放入了一个自定义的`TargetSource`
+
+#### 9.4.2 `BeanFactory`
+
+示例代码如下
+
+```java
+package day04.circularDependency;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectFactory;
+import org.springframework.context.annotation.AnnotationConfigUtils;
+import org.springframework.context.support.GenericApplicationContext;
+
+import javax.annotation.PostConstruct;
+
+/**
+ * @author : [wangminan]
+ * @description : [一句话描述该类的功能]
+ */
+public class App60_2 {
+
+    static class A{
+        private static final Logger log = LoggerFactory.getLogger(A.class);
+        private ObjectFactory<B> b;
+
+        public A(ObjectFactory<B> b){
+            log.info("A.constructor with b: {}", b);
+            this.b = b;
+        }
+
+        @PostConstruct
+        public void init(){
+            log.info("A.init");
+        }
+    }
+
+    static class B{
+        private static final Logger log = LoggerFactory.getLogger(B.class);
+        private ObjectFactory<A> a;
+
+        public B(ObjectFactory<A> a){
+            log.info("B.constructor with a: {}", a);
+            this.a = a;
+        }
+
+        @PostConstruct
+        public void init(){
+            log.info("B.init");
+        }
+    }
+
+    public static void main(String[] args) {
+        GenericApplicationContext context = new GenericApplicationContext();
+        context.registerBean("a", A.class);
+        context.registerBean("b", B.class);
+        // 注册bean后处理器来启用Autowired注解
+        AnnotationConfigUtils.registerAnnotationConfigProcessors(context.getDefaultListableBeanFactory());
+        context.refresh();
+
+        System.out.println(context.getBean(A.class).b.getObject());
+        System.out.println(context.getBean(B.class));
+
+        context.close();
+    }
+}
+```
+
+输出如下
+
+```java
+[INFO] 16:59:41.727 [main] - A.constructor with b: org.springframework.beans.factory.support.DefaultListableBeanFactory$DependencyObjectProvider@73ee04c8 
+[INFO] 16:59:41.738 [main] - A.init 
+[INFO] 16:59:41.740 [main] - B.constructor with a: org.springframework.beans.factory.support.DefaultListableBeanFactory$DependencyObjectProvider@72cde7cc 
+[INFO] 16:59:41.741 [main] - B.init 
+day04.circularDependency.App60_2$B@306e95ec
+day04.circularDependency.App60_2$B@306e95ec
+```
+
+可以见到注入的都是工厂类型的对象
+
+将ObjectFactory换成ObjectProvider效果是一致的
+
+#### 9.4.3 `Provider`
+
+与第二套解决方法基本一致，将`BeanFactory`换为`Provider`
 
