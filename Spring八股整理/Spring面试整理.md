@@ -3229,5 +3229,130 @@ day04.circularDependency.App60_2$B@306e95ec
 
 #### 9.4.3 `Provider`
 
-与第二套解决方法基本一致，将`BeanFactory`换为`Provider`
+与第二套解决方法基本一致，将`BeanFactory`换为`javax.inject.Provider`，需要在pom.xml中引入如下依赖
 
+```xml
+<dependency>
+    <groupId>javax.inject</groupId>
+    <artifactId>javax.inject</artifactId>
+    <version>1</version>
+</dependency>
+```
+
+代码如下
+
+```java
+public class App60_3 {
+    static class A{
+        private static final Logger log = LoggerFactory.getLogger(A.class);
+        private Provider<B> b;
+
+        public A(Provider<B> b){
+            log.info("A.constructor with b: {}", b);
+            this.b = b;
+        }
+
+        @PostConstruct
+        public void init(){
+            log.info("A.init");
+        }
+    }
+
+    static class B{
+        private static final Logger log = LoggerFactory.getLogger(B.class);
+        private Provider<A> a;
+
+        public B(Provider<A> a){
+            log.info("B.constructor with a: {}", a);
+            this.a = a;
+        }
+
+        @PostConstruct
+        public void init(){
+            log.info("B.init");
+        }
+    }
+
+    public static void main(String[] args) {
+        GenericApplicationContext context = new GenericApplicationContext();
+        context.registerBean("a", A.class);
+        context.registerBean("b", B.class);
+        // 注册bean后处理器来启用Autowired注解
+        AnnotationConfigUtils.registerAnnotationConfigProcessors(context.getDefaultListableBeanFactory());
+        context.refresh();
+
+        System.out.println(context.getBean(A.class).b.getClass());
+        System.out.println(context.getBean(B.class));
+
+        context.close();
+    }
+}
+```
+
+输出如下所示
+
+```java
+[INFO] 22:19:08.993 [main] - A.constructor with b: org.springframework.beans.factory.support.DefaultListableBeanFactory$Jsr330Factory$Jsr330Provider@2cd2a21f 
+[INFO] 22:19:09.007 [main] - A.init 
+[INFO] 22:19:09.009 [main] - B.constructor with a: org.springframework.beans.factory.support.DefaultListableBeanFactory$Jsr330Factory$Jsr330Provider@41fecb8b 
+[INFO] 22:19:09.010 [main] - B.init 
+class org.springframework.beans.factory.support.DefaultListableBeanFactory$Jsr330Factory$Jsr330Provider
+day04.circularDependency.App60_3$B@f5acb9d
+```
+
+此时[`resolveDependency`](#9.4.1 `@Lazy`)的选择进入下面的分支创建工厂对象
+
+```java
+else if (javaxInjectProviderClass == descriptor.getDependencyType()) {
+    return new Jsr330Factory().createDependencyProvider(descriptor, requestingBeanName);
+}
+```
+
+其中的`createDependencyProvider`实现在`Jsr330Factory`中，用于创建工厂对象
+
+```java
+public Object createDependencyProvider(DependencyDescriptor descriptor, @Nullable String beanName) {
+        return new Jsr330Provider(descriptor, beanName);
+}
+```
+
+#### 9.4.4 `@Scope`
+
+在类上使用`@Scope`也可以生成代理以达到与`@Lazy`一致的效果
+
+```java
+@Component
+@Scope(proxyMode = ScopedProxyMode.TARGET_CLASS)
+public class B {
+    private static final Logger log = LoggerFactory.getLogger(B.class);
+    private A a;
+
+    public B(A a){
+        log.info("B.constructor with a: {}", a);
+        this.a = a;
+    }
+    
+    @PostConstruct
+    public void init(){
+        log.info("B.init");
+    }
+}
+```
+
+使用`@Scope`会产生额外的ScopeTarget，因此不推荐。
+
+
+
+### 9.5 总结
+
++ 单例Set方法(包括成员变量)循环依赖，Spring会利用三级缓存，无需额外配置。
+  + 一级缓存存放成品对象
+  + 二级缓存存放发生了循环依赖的产品对象(可能是原始对象也可能是代理对象)
+  + 三级缓存存放工厂对象，发生循环依赖时调用工厂对象生产产品
+  + Spring期望在初始化时创建代理，如果创建了循环依赖，会由工厂提前创建代理，后续初始化不用重复创建代理
+  + 二级缓存的意义在于:如果提前创建了代理对象，在最后阶段中需要从二级缓存中获取代理对象，作为最终结果
++ 构造方法及多例循环依赖解决方法
+  + @Lazy
+  + @Scope
+  + ObjectFactory & ObjectProvider
+  + Provider
