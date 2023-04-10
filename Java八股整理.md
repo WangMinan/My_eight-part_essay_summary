@@ -160,6 +160,20 @@ sleep可以在任何地方使用，而wait只能在同步方法或者同步块�
 
 当一个线程访问某个对象的synchronized方法或synchronized代码块时，其他线程仍然可以访问该对象的非同步代码块。但是，当一个线程访问某个对象的synchronized方法或synchronized代码块时，**其他线程将被阻塞**，直到该线程执行完该方法或该代码块 。这是因为synchronized关键字可以保证**在同一个时刻，只有一个线程可以执行某个方法或某个代码块**(主要是对方法或者代码块中存在共享数据的操作)，同时synchronized还可以保证一个线程的变化(主要是共享数据的变化)被其他线程所看到，保证可见性。(Volatile也会干这个)
 
+Sychronized是基于对象实现的。一个对象在JVM中的存储情况如下
+
+```mermaid
+graph LR
+	new_Object --> 对象头
+	new_Object --> 实例数据
+	new_Object --> 对象填充
+	对象头 --> MarkWord
+	对象头 --> ClassPoint
+	MarkWord --> 包含四种锁:无锁001,偏向锁101,轻量级锁00,重量级锁10
+```
+
+
+
 
 
 #### Lock与Sychronized的区别
