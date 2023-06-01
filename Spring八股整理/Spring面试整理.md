@@ -3356,3 +3356,27 @@ public class B {
   + @Scope
   + ObjectFactory & ObjectProvider
   + Provider
+
+
+
+# 10. 补充
+
+### 10.1 Filter和Interceptor的区别
+
+Filter和Interceptor是Java Web开发中常用的两种组件。
+
+Filter是基于函数回调的，而Interceptor则是基于Java反射的。
+
+Filter依赖于Servlet容器，而Interceptor不依赖于Servlet容器。
+
+Filter对几乎所有的请求起作用，而Interceptor只能对action请求起作用。
+
+Interceptor可以访问Action的上下文，值栈里的对象，而Filter不能。
+
+Filter主要是针对URL地址做编码、过滤参数、安全校验等，而Interceptor功能更强大，可以在请求前、请求后执行。
+
+Filter的实现比较占用栈空间，在Filter多的情况下可能会有栈溢出的风险存在，而Interceptor的实现逻辑更加清晰简单。
+
+Filter组件更加通用，只要支持Java Servlet的容器都可以使用，而Interceptor必须依赖于Spring。
+
+Filter在只在Servlet前后起作用，而拦截器能够深入到方法前后、异常抛出前后等，因此拦截器的使用具有更大的弹性。
